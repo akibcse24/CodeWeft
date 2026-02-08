@@ -1,0 +1,328 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "./useAuth";
+import { logger } from "@/lib/logger";
+
+interface GitHubSettings {
+  id: string;
+  user_id: string;
+  github_token: string | null;
+  github_username: string | null;
+  avatar_url: string | null;
+  solutions_repo: string | null;
+  github_installation_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface GitHubUser {
+  login: string;
+  avatar_url: string;
+  name: string;
+}
+
+interface TestConnectionResult {
+  valid: boolean;
+  user?: GitHubUser;
+  error?: string;
+}
+
+interface ContributionData {
+  total: number;
+  contributions: Array<{
+    date: string;
+    contributionCount: number;
+  }>;
+}
+
+interface GitHubEvent {
+  id: string;
+  type: string;
+  created_at: string;
+  repo: {
+    name: string;
+  };
+  payload: {
+    commits?: Array<{
+      message: string;
+      sha: string;
+    }>;
+  };
+}
+
+export function useGitHub() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  // Fetch GitHub settings
+  const {
+    data: settings,
+    isLoading: settingsLoading,
+    error: settingsError,
+  } = useQuery({
+    queryKey: ["github-settings", user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+
+      const { data, error } = await supabase
+        .from("github_settings")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data as GitHubSettings | null;
+    },
+    enabled: !!user,
+  });
+
+  // Test connection with a token
+  const testConnection = useMutation({
+    mutationFn: async (token: string): Promise<TestConnectionResult> => {
+      const { data, error } = await supabase.functions.invoke("github-api?action=test", {
+        body: { token },
+        method: "POST",
+      });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Save GitHub settings
+  const saveSettings = useMutation({
+    mutationFn: async (newSettings: {
+      github_token: string;
+      github_username: string;
+      avatar_url?: string;
+      solutions_repo?: string;
+    }) => {
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: existing } = await supabase
+        .from("github_settings")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (existing) {
+        const { data, error } = await supabase
+          .from("github_settings")
+          .update({
+            ...newSettings,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      } else {
+        const { data, error } = await supabase
+          .from("github_settings")
+          .insert({
+            user_id: user.id,
+            ...newSettings,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["github-settings"] });
+    },
+  });
+
+  // Disconnect GitHub
+  const disconnect = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("Not authenticated");
+
+      const { error } = await supabase
+        .from("github_settings")
+        .delete()
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["github-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["github-contributions"] });
+      queryClient.invalidateQueries({ queryKey: ["github-events"] });
+    },
+  });
+
+  // Fetch contributions
+  const {
+    data: contributions,
+    isLoading: contributionsLoading,
+    refetch: refetchContributions,
+  } = useQuery({
+    queryKey: ["github-contributions", user?.id],
+    queryFn: async (): Promise<ContributionData | null> => {
+      const { data, error } = await supabase.functions.invoke("github-api", {
+        method: "POST",
+        body: {},
+      });
+
+      // Need to use GET with query params
+      const response = await supabase.functions.invoke("github-api?action=contributions", {
+        method: "POST",
+        body: {},
+      });
+
+      if (response.error) {
+        logger.error("Contributions error:", response.error);
+        return null;
+      }
+      return response.data;
+    },
+    enabled: !!settings?.github_token && !!settings?.github_username,
+  });
+
+  // Fetch recent events (commits, PRs, etc.)
+  const {
+    data: events,
+    isLoading: eventsLoading,
+    refetch: refetchEvents,
+  } = useQuery({
+    queryKey: ["github-events", user?.id],
+    queryFn: async (): Promise<GitHubEvent[] | null> => {
+      const response = await supabase.functions.invoke("github-api?action=events", {
+        method: "POST",
+        body: {},
+      });
+
+      if (response.error) {
+        logger.error("Events error:", response.error);
+        return null;
+      }
+      return response.data;
+    },
+    enabled: !!settings?.github_token && !!settings?.github_username,
+  });
+
+  const isConnected = !!settings?.github_token && !!settings?.github_username;
+
+  return {
+    settings,
+    settingsLoading,
+    settingsError,
+    isConnected,
+    testConnection,
+    saveSettings,
+    disconnect,
+    contributions,
+    contributionsLoading,
+    refetchContributions,
+    events,
+    eventsLoading,
+    refetchEvents,
+  };
+}
+
+// Hook for fetching repo-specific data
+export function useGitHubRepo(githubUrl: string | null | undefined) {
+  const { user } = useAuth();
+
+  const parseGitHubUrl = (url: string) => {
+    const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
+    if (match) {
+      return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
+    }
+    return null;
+  };
+
+  const parsed = githubUrl ? parseGitHubUrl(githubUrl) : null;
+
+  // Fetch repo stats
+  const {
+    data: repoStats,
+    isLoading: repoLoading,
+    error: repoError,
+    refetch: refetchRepo,
+  } = useQuery({
+    queryKey: ["github-repo", parsed?.owner, parsed?.repo],
+    queryFn: async () => {
+      if (!parsed) return null;
+
+      const response = await supabase.functions.invoke(
+        `github-api?action=repo&owner=${parsed.owner}&repo=${parsed.repo}`,
+        { method: "POST", body: {} }
+      );
+
+      if (response.error) throw response.error;
+      return response.data;
+    },
+    enabled: !!parsed && !!user,
+  });
+
+  // Fetch commits
+  const {
+    data: commits,
+    isLoading: commitsLoading,
+    refetch: refetchCommits,
+  } = useQuery({
+    queryKey: ["github-commits", parsed?.owner, parsed?.repo],
+    queryFn: async () => {
+      if (!parsed) return null;
+
+      const response = await supabase.functions.invoke(
+        `github-api?action=commits&owner=${parsed.owner}&repo=${parsed.repo}&limit=5`,
+        { method: "POST", body: {} }
+      );
+
+      if (response.error) throw response.error;
+      return response.data;
+    },
+    enabled: !!parsed && !!user,
+  });
+
+  return {
+    repoStats,
+    repoLoading,
+    repoError,
+    refetchRepo,
+    commits,
+    commitsLoading,
+    refetchCommits,
+    parsed,
+  };
+}
+
+// Hook for importing DSA solutions
+export function useGitHubSolutions() {
+  const { user } = useAuth();
+
+  const fetchSolutions = useMutation({
+    mutationFn: async (repo?: string) => {
+      const url = repo
+        ? `github-api?action=solutions&repo=${encodeURIComponent(repo)}`
+        : "github-api?action=solutions";
+
+      const response = await supabase.functions.invoke(url, {
+        method: "POST",
+        body: {},
+      });
+
+      if (response.error) throw response.error;
+      return response.data as {
+        solutions: Array<{
+          path: string;
+          name: string;
+          language: string;
+          url: string;
+        }>;
+        total: number;
+      };
+    },
+  });
+
+  return {
+    fetchSolutions,
+  };
+}

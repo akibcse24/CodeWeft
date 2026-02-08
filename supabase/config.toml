@@ -1,0 +1,4 @@
+project_id = "glegbqhjuwwmvzgagugx"
+
+[functions.codespace-shell]
+verify_jwt = false
