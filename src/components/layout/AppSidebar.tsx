@@ -1,50 +1,25 @@
 import { useState, useMemo, useCallback } from "react";
 import { useLocation, Link, useNavigate } from "react-router-dom";
 import {
-  Code2,
-  Database,
-  FileText,
-  FolderKanban,
-  GitBranch,
-  Github,
-  LayoutDashboard,
-  Settings,
-  Shield,
-  FlaskConical,
-  Bot,
-  BarChart3,
-  Play,
-  GraduationCap,
-  Home,
-  Moon,
-  CheckSquare,
-  BookOpen,
-  Timer,
-  Brain,
-  Search,
+  mainNavItems,
+  studyItems,
+  productivityItems,
+  mlItems,
+  githubNavItems,
+  toolsNavItems
+} from "@/constants/nav-items";
+import {
   ChevronDown,
   Sparkles,
-  Monitor,
-  Archive,
-  Terminal,
-  Brush,
-  Globe,
-  Book,
-  Box,
-  Briefcase,
-  TrendingUp,
-  Hammer,
-  BarChart2,
-  Wrench,
-  Keyboard,
-  Palette,
-  Command,
   Plus,
   MoreHorizontal,
   LogOut,
   User,
-  Bell,
-  Star
+  Settings,
+  Star,
+  FileText,
+  Moon,
+  Search
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -52,7 +27,6 @@ import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
-  SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
@@ -60,18 +34,9 @@ import {
   SidebarMenuItem,
   SidebarFooter,
   useSidebar,
-  SidebarSeparator,
   SidebarRail,
   SidebarMenuBadge,
-  SidebarMenuAction,
 } from "@/components/ui/sidebar";
-import { Input } from "@/components/ui/input";
-import { useTheme } from "@/hooks/use-theme";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { PageTree } from "@/components/notes/PageTree";
-import { useTasks } from "@/hooks/useTasks";
-import { usePages } from "@/hooks/usePages";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -80,66 +45,12 @@ import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useAuth } from "@/hooks/useAuth";
 import { SyncStatus } from "@/components/SyncStatus";
 import { useProfile } from "@/hooks/useProfile";
+import { useTasks } from "@/hooks/useTasks";
+import { usePages } from "@/hooks/usePages";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { PageTree } from "@/components/notes/PageTree";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
-// --- Configuration Data ---
-
-export const mainNavItems = [
-  { title: "Dashboard", url: "/", icon: Home },
-  { title: "Tasks", url: "/tasks", icon: CheckSquare },
-];
-
-export const studyItems = [
-  { title: "Notes", url: "/notes", icon: FileText },
-  { title: "Courses", url: "/courses", icon: GraduationCap },
-  { title: "DSA Problems", url: "/dsa", icon: Code2 },
-  { title: "Algo Visualizer", url: "/algo-visualizer", icon: BarChart2 },
-  { title: "Code Type", url: "/code-type", icon: Keyboard },
-  { title: "Resources", url: "/resources", icon: BookOpen },
-  { title: "Flashcards", url: "/flashcards", icon: Brain },
-  { title: "Growth Hub", url: "/growth-hub", icon: TrendingUp },
-];
-
-export const productivityItems = [
-  { title: "Pomodoro", url: "/pomodoro", icon: Timer },
-  { title: "Zen Room", url: "/zen-room", icon: Moon },
-  { title: "Habits", url: "/habits", icon: Sparkles },
-  { title: "Projects", url: "/projects", icon: FolderKanban },
-  { title: "Builder Hub", url: "/builder-hub", icon: Hammer },
-];
-
-export const mlItems = [
-  { title: "ML Notes", url: "/ml-notes", icon: FlaskConical },
-  { title: "Papers", url: "/papers", icon: FileText },
-  { title: "Datasets", url: "/datasets", icon: Database },
-];
-
-export const githubNavItems = [
-  { title: "Git Operations", url: "/github/operations", icon: GitBranch },
-  { title: "Repositories", url: "/github/repositories", icon: Github },
-  { title: "Code Editor", url: "/github/editor", icon: Code2 },
-  { title: "Branches", url: "/github/branches", icon: GitBranch },
-  { title: "Gists", url: "/github/gists", icon: Code2 },
-  { title: "Actions", url: "/github/actions", icon: Play },
-  { title: "Codespaces", url: "/github/codespaces", icon: Monitor },
-  { title: "Backups", url: "/github/backup", icon: Archive },
-];
-
-export const toolsNavItems = [
-  { title: "AI Assistant", url: "/ai", icon: Bot },
-  { title: "DevBox", url: "/devbox", icon: Terminal },
-  { title: "Whiteboard", url: "/whiteboard", icon: Brush },
-  { title: "Interview Hub", url: "/interview-hub", icon: Briefcase },
-  { title: "API Client", url: "/api-client", icon: Globe },
-  { title: "Regex Lab", url: "/regex-lab", icon: FlaskConical },
-  { title: "Theme Forge", url: "/theme-forge", icon: Palette },
-  { title: "Dev Utils", url: "/dev-utils", icon: Wrench },
-  { title: "Cheat Sheets", url: "/cheat-sheets", icon: Book },
-  { title: "Asset Studio", url: "/asset-studio", icon: Box },
-  { title: "Graph View", url: "/graph", icon: FolderKanban },
-  { title: "Analytics", url: "/analytics", icon: BarChart3 },
-  { title: "Secrets Vault", url: "/secrets", icon: Shield },
-  { title: "Settings", url: "/settings", icon: Settings },
-];
 
 // --- Helper Components ---
 
@@ -320,7 +231,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { profile } = useProfile();
   const { pages, favoritePages, createPage, deletePage, toggleFavorite } = usePages();
   const { tasks } = useTasks(); // Fetch tasks
@@ -667,7 +578,10 @@ export function AppSidebar({ className }: AppSidebarProps) {
                   <ThemeToggle className="scale-90 origin-right hover:bg-transparent shadow-none border-none p-0 h-auto" />
                 </div>
                 <DropdownMenuSeparator className="bg-white/5 my-2" />
-                <DropdownMenuItem className="text-red-500/90 font-bold hover:text-red-500 hover:bg-red-500/10 focus:bg-red-500/10 focus:text-red-500 rounded-xl cursor-pointer transition-all mx-1 py-2.5">
+                <DropdownMenuItem
+                  className="text-red-500/90 font-bold hover:text-red-500 hover:bg-red-500/10 focus:bg-red-500/10 focus:text-red-500 rounded-xl cursor-pointer transition-all mx-1 py-2.5"
+                  onClick={() => signOut()}
+                >
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign Out
                 </DropdownMenuItem>

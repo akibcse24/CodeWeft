@@ -53,12 +53,15 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get("Authorization");
+    console.log("Authorization Header present:", !!authHeader);
+
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       {
         global: {
-          headers: { Authorization: req.headers.get("Authorization")! },
+          headers: { Authorization: authHeader || "" },
         },
       }
     );
@@ -70,19 +73,21 @@ Deno.serve(async (req) => {
     } = await supabaseClient.auth.getUser();
 
     if (userError || !user) {
-      console.error("Auth error:", userError);
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      console.error("Auth error details:", userError);
+      return new Response(JSON.stringify({ error: "Unauthorized", details: userError?.message }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log("Authenticated user found:", user.id);
 
     // Get user's GitHub settings
     const { data: settings, error: settingsError } = await supabaseClient
       .from("github_settings")
       .select("*")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
 
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
@@ -95,7 +100,9 @@ Deno.serve(async (req) => {
     switch (action) {
       case "test": {
         // Test connection with provided token
-        const { token: testToken } = await req.json();
+        const body = await req.json();
+        const testToken = body.token;
+
         if (!testToken) {
           return new Response(
             JSON.stringify({ error: "Token is required" }),
@@ -115,8 +122,10 @@ Deno.serve(async (req) => {
         });
 
         if (!response.ok) {
+          const errorData = await response.json();
+          console.error("GitHub API error during test:", errorData);
           return new Response(
-            JSON.stringify({ error: "Invalid token", valid: false }),
+            JSON.stringify({ error: "Invalid token", valid: false, details: errorData }),
             {
               status: 200,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -295,7 +304,6 @@ Deno.serve(async (req) => {
 
         const username = settings.github_username;
 
-        // Use GitHub's GraphQL API to get contribution data
         const query = `
           query($username: String!) {
             user(login: $username) {
@@ -438,7 +446,6 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Parse owner/repo from the full repo string
         const [owner, repoName] = repo.split("/");
         if (!owner || !repoName) {
           return new Response(
@@ -450,7 +457,6 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Get repository contents (root level)
         const response = await fetch(
           `https://api.github.com/repos/${owner}/${repoName}/git/trees/main?recursive=1`,
           {
@@ -463,7 +469,6 @@ Deno.serve(async (req) => {
         );
 
         if (!response.ok) {
-          // Try master branch if main doesn't exist
           const masterResponse = await fetch(
             `https://api.github.com/repos/${owner}/${repoName}/git/trees/master?recursive=1`,
             {
@@ -517,7 +522,6 @@ function parseAndReturnSolutions(
   owner: string,
   repoName: string
 ) {
-  // Filter for code files (common DSA solution extensions)
   const codeExtensions = [".py", ".js", ".ts", ".java", ".cpp", ".c", ".go", ".rs"];
   const solutions: Array<{
     path: string;
@@ -530,7 +534,6 @@ function parseAndReturnSolutions(
     if (item.type === "blob") {
       const ext = item.path.substring(item.path.lastIndexOf("."));
       if (codeExtensions.includes(ext.toLowerCase())) {
-        // Extract problem name from path
         const pathParts = item.path.split("/");
         const fileName = pathParts[pathParts.length - 1];
         const name = fileName.replace(ext, "").replace(/[-_]/g, " ");

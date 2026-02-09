@@ -163,6 +163,8 @@ interface BlockItemContentProps {
   // Context menu control
   contextMenuOpen?: boolean;
   onContextMenuOpenChange?: (open: boolean) => void;
+  handleInput?: (id: string, e: React.FormEvent<HTMLElement>) => void;
+  onInput?: (e: React.FormEvent<HTMLElement>) => void;
 }
 
 interface SortableBlockItemProps {
@@ -202,6 +204,7 @@ interface SortableBlockItemProps {
   // Context menu control
   contextMenuOpen?: boolean;
   onContextMenuOpenChange?: (open: boolean) => void;
+  handleInput?: (id: string, e: React.FormEvent<HTMLElement>) => void;
 }
 
 function SortableBlockItem(props: SortableBlockItemProps) {
@@ -211,7 +214,7 @@ function SortableBlockItem(props: SortableBlockItemProps) {
     activeBlockId, setActiveBlockId, updateBlock, deleteBlock, addBlockAfter,
     duplicateBlock, turnBlockInto, copyBlockLink, handleKeyDown, dragOverId,
     copySyncedBlock, onCopySyncedBlock, onNavigate, contextMenuOpen, onContextMenuOpenChange,
-    onToggleSelection
+    onToggleSelection, handleInput
   } = props;
 
   const {
@@ -258,6 +261,7 @@ function SortableBlockItem(props: SortableBlockItemProps) {
       <BlockItemContent
         {...{ block, onChange, onDelete, onAddAfter, onDuplicate, onTurnInto, onCopyLink, onKeyDown, onPaste, isActive, onFocus, readOnly, dropSide, isDragOver, onCopySyncedBlock, contextMenuOpen, onContextMenuOpenChange }}
         {...props} // Spread all recursive handlers
+        onInput={handleInput ? (e) => handleInput(block.id, e) : undefined}
         dragHandleProps={{ ...attributes, ...listeners }}
       />
 
@@ -329,7 +333,9 @@ function BlockItemContent({
   onNavigate,
   contextMenuOpen,
   onContextMenuOpenChange,
-  onPaste
+  onPaste,
+  onInput,
+  handleInput
 }: BlockItemContentProps & { dragHandleProps?: React.HTMLAttributes<HTMLButtonElement> }) {
   const recursionHandlers = {
     activeBlockId,
@@ -342,6 +348,7 @@ function BlockItemContent({
     copyBlockLink,
     copySyncedBlock,
     handleKeyDown: handleGlobalKeyDown,
+    handleInput,
     dragOverId,
     onChange,
     onDelete,
@@ -383,6 +390,20 @@ function BlockItemContent({
   const handleContentChange = useCallback((newContent: string) => {
     onChange({ ...block, content: newContent });
   }, [block, onChange]);
+
+  useEffect(() => {
+    if (contentRef.current && onInput) {
+      const handler = (e: Event) => onInput(e as unknown as React.FormEvent<HTMLElement>);
+      contentRef.current.addEventListener('input', handler);
+      return () => contentRef.current?.removeEventListener('input', handler);
+    }
+  }, [onInput, block.type]);
+
+  useEffect(() => {
+    if (isActive && !readOnly && contentRef.current && document.activeElement !== contentRef.current) {
+      contentRef.current.focus();
+    }
+  }, [isActive, block.type, readOnly]);
 
   const hasComments = block.comments && block.comments.length > 0;
 
@@ -1697,9 +1718,82 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
     setActiveBlockId(newBlock.id);
   }, [blocks, onChange]);
 
+  const handleGlobalInput = useCallback((blockId: string, e: React.FormEvent<HTMLElement>) => {
+    const text = (e.currentTarget?.textContent || "").replace(/\u200B/g, "").trim();
+    if (slashMenuOpen) {
+      if (text.startsWith("/")) {
+        setSlashSearchTerm(text.substring(1));
+      } else {
+        setSlashMenuOpen(false);
+      }
+    }
+    if (wikiMenuOpen) {
+      const match = text.match(/\[\[([^\]]*)$/);
+      if (match) {
+        setWikiSearchTerm(match[1]);
+      } else {
+        setWikiMenuOpen(false);
+      }
+    }
+    if (mentionMenuOpen) {
+      const match = text.match(/@([^@\s]*)$/);
+      if (match) {
+        setMentionSearchTerm(match[1]);
+      } else {
+        setMentionMenuOpen(false);
+      }
+    }
+  }, [slashMenuOpen, wikiMenuOpen, mentionMenuOpen]);
+
+
+
   const handleGlobalKeyDown = useCallback((blockId: string, e: React.KeyboardEvent<HTMLElement>) => {
     const block = findBlockRecursive(blocks, blockId);
     if (!block) return;
+
+    const currentText = (e.currentTarget?.textContent || "").replace(/\u200B/g, "").trim();
+
+    // Input rules (Markdown replacements on Space)
+    if (e.key === " " && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (currentText === "#") { e.preventDefault(); updateBlock(blockId, { type: "heading1", content: "" }); return; }
+      if (currentText === "##") { e.preventDefault(); updateBlock(blockId, { type: "heading2", content: "" }); return; }
+      if (currentText === "###") { e.preventDefault(); updateBlock(blockId, { type: "heading3", content: "" }); return; }
+      if (currentText === ">") { e.preventDefault(); updateBlock(blockId, { type: "quote", content: "" }); return; }
+      if (currentText === ">!") { e.preventDefault(); updateBlock(blockId, { type: "toggle", content: "" }); return; }
+      if (currentText === "-" || currentText === "*") { e.preventDefault(); updateBlock(blockId, { type: "bulletList", content: "" }); return; }
+      if (currentText === "1.") { e.preventDefault(); updateBlock(blockId, { type: "numberedList", content: "" }); return; }
+      if (currentText === "[]" || currentText === "[ ]") { e.preventDefault(); updateBlock(blockId, { type: "todo", content: "" }); return; }
+    }
+
+    // Input rules (Code Block & Divider on Enter)
+    if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !slashMenuOpen && !wikiMenuOpen && !mentionMenuOpen) {
+      if (currentText === "```") {
+        e.preventDefault();
+        updateBlock(blockId, { type: "code", content: "", language: "javascript" });
+        return;
+      }
+      if (currentText.startsWith("```") && currentText.length > 3) {
+        const lang = currentText.slice(3).trim();
+        e.preventDefault();
+        updateBlock(blockId, { type: "code", content: "", language: lang || "javascript" });
+        return;
+      }
+      if (currentText === "---" || currentText === "***" || currentText === "___") {
+        e.preventDefault();
+        // For divider, we turn current into divider AND add a block after.
+        // We can do this by applying both transformations to the blocks array.
+        let newBlocks = updateBlocksRecursive(blocks, blockId, { type: "divider", content: "" });
+        const nextBlock = {
+          id: generateId(),
+          type: "paragraph" as BlockType,
+          content: "",
+          metadata: { indent: 0 }
+        };
+        newBlocks = addBlockAfterRecursive(newBlocks, blockId, nextBlock);
+        onChange(newBlocks);
+        return;
+      }
+    }
 
     // Keyboard shortcuts for formatting
     if (matchesShortcut(e, EDITOR_SHORTCUTS.BOLD)) {
@@ -1727,7 +1821,7 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
     }
 
     // Also trigger slash menu on "/" when block is empty
-    if (e.key === "/" && block.content === "" && !slashMenuOpen) {
+    if (e.key === "/" && currentText === "" && !slashMenuOpen) {
       setSlashMenuOpen(true);
       setSlashSearchTerm("");
       setSelectedMenuIndex(0);
@@ -2137,43 +2231,18 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
     copyBlockLink,
     copySyncedBlock,
     handleKeyDown: handleGlobalKeyDown,
+    handleInput: handleGlobalInput,
     getBlock,
     dragOverId
   };
 
-  // Update search terms based on content changes
+  // Update search terms based on content changes - REMOVED (Handled by handleGlobalInput now)
+  /*
   useEffect(() => {
     if ((!slashMenuOpen && !wikiMenuOpen) || !activeBlockId) return;
-
-    const block = blocks.find(b => b.id === activeBlockId);
-    if (!block) return;
-
-    if (slashMenuOpen) {
-      if (block.content.startsWith("/")) {
-        setSlashSearchTerm(block.content.substring(1));
-      } else {
-        setSlashMenuOpen(false);
-      }
-    }
-
-    if (wikiMenuOpen) {
-      const match = block.content.match(/\[\[([^\]]*)$/);
-      if (match) {
-        setWikiSearchTerm(match[1]);
-      } else {
-        setWikiMenuOpen(false);
-      }
-    }
-
-    if (mentionMenuOpen) {
-      const match = block.content.match(/@([^@\s]*)$/);
-      if (match) {
-        setMentionSearchTerm(match[1]);
-      } else {
-        setMentionMenuOpen(false);
-      }
-    }
-  }, [blocks, activeBlockId, slashMenuOpen, wikiMenuOpen, mentionMenuOpen]);
+    // ...
+  }, ...); 
+  */
 
   const handleWikiSelect = useCallback((page: { id: string; title: string }, blockId: string) => {
     const block = findBlockRecursive(blocks, blockId);
