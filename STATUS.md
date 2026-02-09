@@ -1,5 +1,25 @@
 # Project Status - CodeWeft
 
+## 2026-02-09 11:45 UTC
+- **Completed**:
+    - **Database Schema Alignment**: Created missing `page_templates` table and added `updated_at` columns to `habit_completions` and `habit_logs` for robust delta-sync support.
+    - **Edge Function Hardening**: Resolved CORS "Preflight" errors in `github-api` by implementing comprehensive headers and OPTIONS method handling.
+    - **React Integrity**: Fixed "non-unique key" warnings and `AnimatePresence` mode collisions in `Tasks.tsx` by implementing strict ID filtering and improving tab transition logic.
+    - **PWA Hygiene**: Created missing `manifest.webmanifest` to resolve browser parsing errors and syntax warnings.
+    - **Security & RLS**: Streamlined Row Level Security policies for `github_settings` to resolve 406 "Not Acceptable" errors.
+- **Status**: Build PASS | Database: ALIGNED | Sync: ACTIVE.
+- **Next**:
+    - Finalize "Semantic Clusters" view in the Graph (Auto-grouping).
+    - Add voice-to-note summary (Auto-distillation).
+
+## 2026-02-09 06:10 UTC
+- **Completed**:
+    - **Runtime Error Fix**: Resolved `ReferenceError: Link2 is not defined` in `Notes.tsx` by importing the missing icon from `lucide-react`.
+- **Status**: Build PASS (Verified).
+
+## 2026-02-08 18:30 UTC
+
+
 ## 2026-02-07 21:30 UTC
 - **Completed**:
     - **Security Hardening**: Resolved high-severity XSS vulnerability in `@remix-run/router` by updating dependencies.
