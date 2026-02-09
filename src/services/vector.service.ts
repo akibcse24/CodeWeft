@@ -38,7 +38,11 @@ export const searchVectors = async (queryEmbedding: number[], limit = 5, minScor
         .map(item => item.doc);
 }
 
-function cosineSimilarity(a: number[], b: number[]) {
+export const getAllVectors = async (): Promise<VectorDocument[]> => {
+    return (await get(VECTOR_STORE_KEY)) || [];
+}
+
+export function cosineSimilarity(a: number[], b: number[]) {
     if (a.length !== b.length) return 0;
     let dotProduct = 0;
     let normA = 0;

@@ -33,9 +33,14 @@ import { usePages } from "@/hooks/usePages";
 import { useTasks } from "@/hooks/useTasks";
 import { useDSAProblems } from "@/hooks/useDSAProblems";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
+import { useProfile } from "@/hooks/useProfile";
+import { VoiceCapture } from "@/components/ai/VoiceCapture";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+import { Block } from "@/types/editor.types";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -50,6 +55,10 @@ export default function Dashboard() {
   const { pages } = usePages();
   const { tasks } = useTasks();
   const { problems } = useDSAProblems();
+  const { createPage } = usePages();
+  const { profile } = useProfile();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -67,27 +76,47 @@ export default function Dashboard() {
       return format(d, "MM.dd");
     });
 
-    const activityMap = new Map();
-    last7Days.forEach(day => activityMap.set(day, 0));
+    const neuralMap = new Map();
+    const tacticalMap = new Map();
+    const logicMap = new Map();
 
-    // Combine all activities
-    const allActivities = [
-      ...tasks.map(t => ({ date: t.created_at })),
-      ...pages.map(p => ({ date: p.updated_at })),
-      ...problems.map(p => ({ date: p.created_at }))
-    ].filter(a => a.date);
-
-    allActivities.forEach(act => {
-      const day = format(new Date(act.date), "MM.dd");
-      if (activityMap.has(day)) {
-        activityMap.set(day, activityMap.get(day) + 1);
-      }
+    last7Days.forEach(day => {
+      neuralMap.set(day, 0);
+      tacticalMap.set(day, 0);
+      logicMap.set(day, 0);
     });
 
-    return last7Days.map(day => ({
-      day,
-      throughput: (activityMap.get(day) || 0) * 12
-    }));
+    tasks.forEach(t => {
+      if (!t.created_at) return;
+      const day = format(new Date(t.created_at), "MM.dd");
+      if (tacticalMap.has(day)) tacticalMap.set(day, tacticalMap.get(day) + 1);
+    });
+
+    pages.forEach(p => {
+      const date = p.updated_at || p.created_at;
+      if (!date) return;
+      const day = format(new Date(date), "MM.dd");
+      if (neuralMap.has(day)) neuralMap.set(day, neuralMap.get(day) + 1);
+    });
+
+    problems.forEach(p => {
+      if (!p.created_at) return;
+      const day = format(new Date(p.created_at), "MM.dd");
+      if (logicMap.has(day)) logicMap.set(day, logicMap.get(day) + 1);
+    });
+
+    return last7Days.map(day => {
+      const n = (neuralMap.get(day) || 0) * 10;
+      const t = (tacticalMap.get(day) || 0) * 8;
+      const l = (logicMap.get(day) || 0) * 15;
+      return {
+        day,
+        neural: n,
+        tactical: t,
+        logic: l,
+        throughput: n + t + l
+      };
+    });
   }, [tasks, pages, problems]);
 
 
@@ -128,7 +157,7 @@ export default function Dashboard() {
           >
             <h1 className="text-8xl font-black tracking-tighter leading-[0.9] bg-clip-text text-transparent bg-gradient-to-br from-foreground via-foreground to-foreground/40">
               {greeting}, <br />
-              <span className="text-primary italic px-2">{user?.email?.split('@')[0] || "Operator"}</span>
+              <span className="text-primary italic px-2">{profile?.username || user?.email?.split('@')[0] || "Operator"}</span>
             </h1>
           </motion.div>
           <div className="flex flex-wrap items-center gap-8 text-muted-foreground font-medium italic opacity-70">
@@ -196,36 +225,79 @@ export default function Dashboard() {
               </CardHeader>
 
               <CardContent className="h-[420px] p-12 pt-16 relative">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,hsla(var(--primary)/0.1),transparent)] pointer-events-none" />
                 {isClient && (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={activityData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <AreaChart data={activityData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                       <defs>
-                        <linearGradient id="dashboardChart" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                        <linearGradient id="neuralGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                         </linearGradient>
+                        <linearGradient id="tacticalGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="logicGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                        </linearGradient>
+                        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                          <feGaussianBlur stdDeviation="4" result="blur" />
+                          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.03)" />
+                      <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(255,255,255,0.05)" />
                       <XAxis
                         dataKey="day"
                         axisLine={false}
                         tickLine={false}
-                        tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 900 }}
-                        dy={20}
+                        tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 10, fontWeight: 900 }}
+                        dy={25}
                       />
                       <YAxis hide />
                       <Tooltip
-                        cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
+                        cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1 }}
                         content={({ active, payload }) => {
                           if (active && payload && payload.length) {
+                            const data = payload[0].payload;
                             return (
-                              <div className="bg-black/80 backdrop-blur-3xl p-6 border border-white/10 rounded-[2rem] shadow-2xl">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mb-3 italic">Index: {payload[0].payload.day}</p>
-                                <div className="flex items-center gap-4">
-                                  <div className="p-3 rounded-2xl bg-primary/10 text-primary">
-                                    <Activity className="h-5 w-5" />
+                              <div className="bg-background/40 backdrop-blur-3xl p-8 border border-white/10 rounded-[2.5rem] shadow-2xl space-y-4 min-w-[240px]">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Neural Synchrony</span>
+                                  <span className="text-[10px] font-bold opacity-30">{data.day}</span>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <div className="flex items-center justify-between group/tip">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]" />
+                                      <span className="text-xs font-bold opacity-60">Neural Archives</span>
+                                    </div>
+                                    <span className="text-xs font-black tracking-tight">{data.neural}</span>
                                   </div>
-                                  <p className="text-3xl font-black text-foreground">{payload[0].value}<span className="text-xs opacity-30 ml-1">cycles/s</span></p>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+                                      <span className="text-xs font-bold opacity-60">Tactical Directives</span>
+                                    </div>
+                                    <span className="text-xs font-black tracking-tight">{data.tactical}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500 shadow-[0_0_8px_#8b5cf6]" />
+                                      <span className="text-xs font-bold opacity-60">Logic Solutions</span>
+                                    </div>
+                                    <span className="text-xs font-black tracking-tight">{data.logic}</span>
+                                  </div>
+                                </div>
+
+                                <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                                  <span className="text-sm font-black uppercase tracking-widest text-foreground">Total Load</span>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="text-2xl font-black tracking-tighter text-primary">{data.throughput}</span>
+                                    <span className="text-[9px] font-bold opacity-20 text-primary">cycles</span>
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -235,15 +307,38 @@ export default function Dashboard() {
                       />
                       <Area
                         type="monotone"
+                        dataKey="neural"
+                        stackId="1"
+                        stroke="transparent"
+                        fill="url(#neuralGrad)"
+                        animationDuration={2000}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="tactical"
+                        stackId="1"
+                        stroke="transparent"
+                        fill="url(#tacticalGrad)"
+                        animationDuration={2500}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="logic"
+                        stackId="1"
+                        stroke="transparent"
+                        fill="url(#logicGrad)"
+                        animationDuration={3000}
+                      />
+                      <Area
+                        type="monotone"
                         dataKey="throughput"
-                        stroke="hsl(var(--primary))"
-                        fillOpacity={1}
-                        fill="url(#dashboardChart)"
-                        strokeWidth={6}
-                        strokeLinecap="round"
-                        animationDuration={4000}
-                        dot={{ r: 4, fill: 'hsl(var(--primary))', strokeWidth: 0 }}
-                        activeDot={{ r: 8, fill: '#fff', strokeWidth: 0 }}
+                        stroke="hsla(var(--primary), 1)"
+                        strokeWidth={4}
+                        fill="transparent"
+                        animationDuration={3500}
+                        dot={{ r: 3, fill: 'hsla(var(--primary), 1)', strokeWidth: 0, fillOpacity: 0.5 }}
+                        activeDot={{ r: 6, fill: '#fff', strokeWidth: 0 }}
+                        style={{ filter: "url(#glow)" }}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -393,6 +488,32 @@ export default function Dashboard() {
           </Card>
 
 
+        </div>
+      </div>
+
+      {/* Quick Global Capture */}
+      <div className="fixed bottom-12 right-12 z-50 flex flex-col items-end gap-6">
+        <div className="flex flex-col items-end">
+          <span className="text-[10px] font-black uppercase tracking-[0.5em] text-primary mb-3 bg-primary/5 px-4 py-1.5 rounded-full border border-primary/20 backdrop-blur-3xl shadow-2xl">Neural Capture</span>
+          <VoiceCapture onTranscription={async (text) => {
+            const result = await createPage.mutateAsync({
+              title: `Neural Clip: ${format(new Date(), "MMM d, HH:mm")}`,
+              icon: "🎙️",
+              content: [
+                { id: "1", type: "paragraph", content: text }
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              ] as any
+            });
+            toast({
+              title: "Neural uplink successful",
+              description: "Transcription archived in Knowledge Base.",
+              action: (
+                <Button variant="outline" size="sm" onClick={() => navigate(`/notes?id=${result.id}`)}>
+                  Open Note
+                </Button>
+              )
+            });
+          }} />
         </div>
       </div>
     </div>

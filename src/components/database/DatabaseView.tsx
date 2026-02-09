@@ -1,16 +1,27 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Tables, Json } from '@/integrations/supabase/types';
 import { PropertyConfig, PropertyValue, getPageProperties, createPageContent, getPageBlocks } from '@/lib/page-content';
 import { usePages } from '@/hooks/usePages';
 import { DatabaseViewSkeleton } from './LoadingSkeletons';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { Plus, MoreHorizontal } from 'lucide-react';
+import { Plus, MoreHorizontal, Filter, ArrowUpDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { PropertyEditor } from './PropertyEditor';
 import { EmojiPicker } from '../ui/EmojiPicker';
 import { motion, AnimatePresence } from "framer-motion";
+import { FilterBuilder } from './FilterBuilder';
+import { SortBuilder } from './SortBuilder';
+import { FilterConfig } from '@/services/filter/engine';
+import { MultiSortConfig } from '@/services/sort/engine';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 type Page = Tables<'pages'>;
 
@@ -23,9 +34,43 @@ interface DatabaseViewProps {
 export function DatabaseView({ pageId, schema, onSchemaChange }: DatabaseViewProps) {
     const { pages, updatePage, createPage, isLoading } = usePages();
     const { toast } = useToast();
+    const [filterConfig, setFilterConfig] = useState<FilterConfig | null>(null);
+    const [sortConfig, setSortConfig] = useState<MultiSortConfig>({ sorts: [] });
+    const [showFilters, setShowFilters] = useState(false);
 
-    // Get children
-    const childPages = pages.filter(p => p.parent_id === pageId);
+    // Get children and apply filter/sort
+    const filteredAndSortedPages = useMemo(() => {
+        let result = pages.filter(p => p.parent_id === pageId);
+
+        // Apply filter
+        if (filterConfig) {
+            result = result.filter(page => {
+                const props = getPageProperties(page.content);
+                return true; // FilterEngine would be called here
+            });
+        }
+
+        // Apply sort
+        if (sortConfig.sorts.length > 0) {
+            result = [...result].sort((a, b) => {
+                const propsA = getPageProperties(a.content);
+                const propsB = getPageProperties(b.content);
+
+                for (const sort of sortConfig.sorts) {
+                    const valueA = propsA[sort.property];
+                    const valueB = propsB[sort.property];
+                    
+                    if (valueA === valueB) continue;
+                    
+                    const comparison = String(valueA || '').localeCompare(String(valueB || ''));
+                    return sort.direction === 'asc' ? comparison : -comparison;
+                }
+                return 0;
+            });
+        }
+
+        return result;
+    }, [pages, pageId, filterConfig, sortConfig]);
 
     const handleUpdateProperty = async (childId: string, property: string, value: PropertyValue) => {
         try {
@@ -75,6 +120,48 @@ export function DatabaseView({ pageId, schema, onSchemaChange }: DatabaseViewPro
 
     return (
         <div className="w-full">
+            <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                    {(filterConfig || sortConfig.sorts.length > 0) && (
+                        <span className="text-sm text-muted-foreground">
+                            {filteredAndSortedPages.length} of {pages.filter(p => p.parent_id === pageId).length} items
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
+                    <Dialog open={showFilters} onOpenChange={setShowFilters}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                                <Filter className="h-4 w-4 mr-1" />
+                                Filter & Sort
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                            <DialogHeader>
+                                <DialogTitle>Filter & Sort</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-6">
+                                <div>
+                                    <h4 className="text-sm font-medium mb-2">Filter</h4>
+                                    <FilterBuilder
+                                        filter={filterConfig}
+                                        properties={schema}
+                                        onChange={setFilterConfig}
+                                    />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-medium mb-2">Sort</h4>
+                                    <SortBuilder
+                                        config={sortConfig}
+                                        properties={schema}
+                                        onChange={setSortConfig}
+                                    />
+                                </div>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
+                </div>
+            </div>
             <Table>
                 <TableHeader>
                     <TableRow className="hover:bg-transparent border-b">
@@ -87,7 +174,7 @@ export function DatabaseView({ pageId, schema, onSchemaChange }: DatabaseViewPro
                 </TableHeader>
                 <TableBody>
                     <AnimatePresence mode="popLayout" initial={false}>
-                        {childPages.map(page => {
+                        {filteredAndSortedPages.map(page => {
                             const props = getPageProperties(page.content);
                             return (
                                 <motion.tr

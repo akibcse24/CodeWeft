@@ -7,7 +7,8 @@ import {
     ListOrdered, CheckSquare, ChevronRight, Code, Quote,
     AlertCircle, Calculator, ChevronDown, Columns2, Columns3,
     Search, FileStack, Network, Table, Database, Bookmark,
-    Image as ImageIcon, Video, Music, File, Link, Minus
+    Image as ImageIcon, Video, Music, File, Link, Minus,
+    Sparkles, Wand2, Highlighter
 } from 'lucide-react';
 
 interface SlashCommandMenuProps {
@@ -27,6 +28,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
     AlertCircle, Calculator, ChevronDown, Columns2, Columns3,
     FileStack, Network, Table, Database, Bookmark,
     ImageIcon, Video, Music, File, Link, Minus,
+    Sparkles, Wand2, Highlighter
 };
 
 const categoryLabels: Record<string, string> = {
@@ -149,7 +151,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
                                 <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider">
                                     {categoryLabels[category] || category}
                                 </div>
-                                
+
                                 {/* Category Items */}
                                 <div>
                                     {categoryCommands.map((command) => {
@@ -171,8 +173,8 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
                                             >
                                                 <div className={cn(
                                                     "flex items-center justify-center h-8 w-8 rounded-md shrink-0 border",
-                                                    isFocused 
-                                                        ? "bg-primary/10 border-primary/20 text-primary" 
+                                                    isFocused
+                                                        ? "bg-primary/10 border-primary/20 text-primary"
                                                         : "bg-muted/50 border-border/50 text-muted-foreground"
                                                 )}>
                                                     <Icon className="h-4 w-4" />
@@ -204,7 +206,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
                         <kbd className="px-1.5 py-0.5 bg-muted rounded text-[9px] font-mono border border-border/50">↵</kbd>
                         <span>Select</span>
                     </div>
-                    <button 
+                    <button
                         onClick={onClose}
                         className="text-[10px] text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1 transition-colors"
                     >

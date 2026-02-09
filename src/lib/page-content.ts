@@ -1,12 +1,13 @@
 import { Block } from "@/components/editor/BlockEditor";
 
-export type PropertyType = 'text' | 'number' | 'select' | 'multi-select' | 'status' | 'date' | 'checkbox' | 'url' | 'email' | 'person';
+export type PropertyType = 'text' | 'number' | 'select' | 'multi-select' | 'status' | 'date' | 'checkbox' | 'url' | 'email' | 'person' | 'formula';
 
 export interface PropertyConfig {
     id: string;
     name: string;
     type: PropertyType;
     options?: { id: string; name: string; color: string }[]; // For select/status
+    formula?: string; // For formula properties
 }
 
 export type PropertyValue = string | number | boolean | string[] | null;

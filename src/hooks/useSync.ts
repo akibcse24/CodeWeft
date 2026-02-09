@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { useEffect, useCallback, useRef } from "react";
 import { useToast } from "./use-toast";
+import { Database } from "@/integrations/supabase/types";
+import { CodeweftStore } from "@/lib/db";
 
 const CORE_TABLES = [
     'tasks', 'pages', 'ml_notes', 'dsa_problems',
@@ -10,7 +12,9 @@ const CORE_TABLES = [
     'habits', 'habit_completions', 'habit_logs',
     'papers', 'projects', 'resources', 'secrets_vault',
     'github_settings', 'profiles'
-];
+] as const;
+
+type TableName = keyof Database['public']['Tables'];
 
 export function useSync() {
     const { user } = useAuth();
@@ -35,15 +39,15 @@ export function useSync() {
                     // Add/Update updated_at for conflict resolution
                     item.data.updated_at = new Date().toISOString();
 
-                    const { error: reqError } = await supabase
-                        .from(item.table as any)
-                        .upsert(item.data);
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const { error: reqError } = await (supabase.from(item.table as TableName) as any)
+                        .upsert(item.data as Database['public']['Tables'][TableName]['Insert']);
                     error = reqError;
                 } else if (item.action === 'delete') {
-                    const { error: reqError } = await supabase
-                        .from(item.table as any)
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const { error: reqError } = await (supabase.from(item.table as TableName) as any)
                         .delete()
-                        .eq('id', item.data.id);
+                        .eq('id', (item.data as { id: string }).id);
                     error = reqError;
                 }
 
@@ -65,14 +69,16 @@ export function useSync() {
         for (const tableName of CORE_TABLES) {
             try {
                 // Get the last record's timestamp from local DB to perform a delta sync
-                const lastRecord = await (db as any)[tableName]
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const table = (db as unknown as Record<string, any>)[tableName];
+                const lastRecord = await table
                     .orderBy('updated_at')
                     .last();
 
-                const lastSyncTime = lastRecord?.updated_at || new Date(0).toISOString();
+                const lastSyncTime = (lastRecord as { updated_at?: string })?.updated_at || new Date(0).toISOString();
 
-                const { data, error } = await supabase
-                    .from(tableName as any)
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const { data, error } = await (supabase.from(tableName as TableName) as any)
                     .select("*")
                     .eq("user_id", user.id)
                     .gt("updated_at", lastSyncTime);
@@ -80,7 +86,7 @@ export function useSync() {
                 if (error) throw error;
 
                 if (data && data.length > 0) {
-                    await (db as any)[tableName].bulkPut(data);
+                    await table.bulkPut(data);
                     console.log(`[Sync] Pulled ${data.length} new records for ${tableName}`);
                 }
             } catch (err) {

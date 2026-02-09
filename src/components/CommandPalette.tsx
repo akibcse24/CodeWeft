@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/command";
 import {
     FileText, Plus, Star, Clock, Search, Settings,
-    BookOpen, Brain, CheckSquare, Folder, Github, Monitor, Play, Archive, Home, Command as CommandIcon, Sparkles
+    BookOpen, Brain, CheckSquare, Folder, Github, Monitor, Play, Archive, Home, Command as CommandIcon, Sparkles, FileSearch
 } from "lucide-react";
 import { usePages } from "@/hooks/usePages";
 import { useAI } from "@/hooks/useAI";
@@ -20,6 +20,8 @@ import { cn } from "@/lib/utils";
 import { Tables } from "@/integrations/supabase/types";
 import { DialogTitle } from '@/components/ui/dialog';
 import { logger } from "@/lib/logger";
+import { quickFindService, BlockSearchResult } from "@/services/search/quickFind";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CommandPaletteProps {
     open: boolean;
@@ -35,6 +37,7 @@ export function CommandPalette({
     const { askAI, indexAllPages, isIndexing } = useAI();
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState<Tables<"pages">[]>([]);
+    const [blockSearchResults, setBlockSearchResults] = useState<BlockSearchResult[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [aiMode, setAiMode] = useState(false);
     const [aiResponse, setAiResponse] = useState("");
@@ -66,13 +69,21 @@ export function CommandPalette({
         const performSearch = async () => {
             if (searchQuery.trim().length < 2) {
                 setSearchResults([]);
+                setBlockSearchResults([]);
                 return;
             }
 
             setIsSearching(true);
             try {
-                const results = await searchPages(searchQuery);
-                setSearchResults(results);
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    const [pageResults, blockResults] = await Promise.all([
+                        searchPages(searchQuery),
+                        quickFindService.search(searchQuery, user.id)
+                    ]);
+                    setSearchResults(pageResults);
+                    setBlockSearchResults(blockResults.slice(0, 10));
+                }
             } catch (error) {
                 logger.error("Search failed:", error);
             } finally {
@@ -188,6 +199,33 @@ export function CommandPalette({
                                             </div>
                                             <p className="text-[11px] text-muted-foreground/60 uppercase tracking-wider mt-0.5 font-medium">
                                                 Last edited {format(new Date(page.updated_at), "MMM d")}
+                                            </p>
+                                        </div>
+                                    </CommandItem>
+                                ))}
+                            </CommandGroup>
+                        )}
+
+                        {/* Block Search Results */}
+                        {blockSearchResults.length > 0 && (
+                            <CommandGroup heading="In Content">
+                                {blockSearchResults.map((result) => (
+                                    <CommandItem
+                                        key={`${result.pageId}-${result.blockId}`}
+                                        value={`block-${result.pageId}-${result.blockId}`}
+                                        onSelect={() => handleSelectPage(result.pageId)}
+                                        className="flex items-start gap-3 py-2 rounded-lg"
+                                    >
+                                        <FileSearch className="mr-3 h-4 w-4 text-muted-foreground mt-0.5" />
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm truncate">{result.pageTitle}</span>
+                                                <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
+                                                    {result.blockType}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground truncate mt-0.5">
+                                                {result.preview}
                                             </p>
                                         </div>
                                     </CommandItem>

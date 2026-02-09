@@ -61,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       provider: "github",
       options: {
         redirectTo: `${window.location.origin}/`,
+        scopes: "repo workflow gist user write:repo_hook delete_repo",
       },
     });
     return { error: error as Error | null };

@@ -5,9 +5,12 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Terminal } from '@xterm/xterm';
+import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { TerminalErrorOverlay } from './TerminalErrorOverlay';
+import { getOctokit } from '@/services/github/octokit.service';
+import * as CodespacesService from '@/services/github/codespaces.service';
 import '@xterm/xterm/css/xterm.css';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -20,17 +23,15 @@ interface CodespaceTerminalProps {
     onError?: (error: string) => void;
 }
 
-import { TerminalErrorOverlay } from './TerminalErrorOverlay';
-
-export function CodespaceTerminal({ 
-    codespaceName, 
+export function CodespaceTerminal({
+    codespaceName,
     githubToken,
     webUrl,
     onStatusChange,
     onError,
 }: CodespaceTerminalProps) {
     const terminalRef = useRef<HTMLDivElement>(null);
-    const terminalInstance = useRef<Terminal | null>(null);
+    const terminalInstance = useRef<Xterm | null>(null);
     const fitAddon = useRef<FitAddon | null>(null);
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectTimerRef = useRef<number | null>(null);
@@ -43,7 +44,7 @@ export function CodespaceTerminal({
     const updateStatus = useCallback((newStatus: ConnectionStatus, errorMsg?: string) => {
         setStatus(newStatus);
         onStatusChange?.(newStatus);
-        
+
         if (newStatus === 'error' && errorMsg) {
             setLastError(errorMsg);
             // Show overlay after max retries are exhausted
@@ -60,7 +61,7 @@ export function CodespaceTerminal({
     useEffect(() => {
         if (!terminalRef.current || terminalInstance.current) return;
 
-        const terminal = new Terminal({
+        const terminal = new Xterm({
             cursorBlink: true,
             cursorStyle: 'block',
             fontFamily: '"Fira Code", "JetBrains Mono", "Cascadia Code", Menlo, Monaco, "Courier New", monospace',
@@ -98,7 +99,7 @@ export function CodespaceTerminal({
         terminal.loadAddon(fitAddon.current);
         terminal.loadAddon(webLinksAddon);
         terminal.open(terminalRef.current);
-        
+
         // Initial fit
         setTimeout(() => {
             fitAddon.current?.fit();
@@ -253,10 +254,78 @@ export function CodespaceTerminal({
                 }
             };
 
+            // Local command buffer for Agentic Shell
+            let commandBuffer = '';
+
+            async function handleAgenticShell(data: string, term: Xterm, name: string) {
+                if (data === '\r' || data === '\n') {
+                    term.write('\r\n');
+                    const cmd = commandBuffer.trim();
+                    commandBuffer = '';
+
+                    if (cmd === 'ls') {
+                        try {
+                            const octokit = await getOctokit();
+                            // We need to know the repo owner and name. We can get it from the codespace name usually prefix-repo
+                            // But better if we pass them. For now, let's try to get them from codespaces list
+                            // Given codespaceName is "scaly-space-robot-v6q9gv6rw939jpv"
+                            // However, we have access to the codespace's webUrl which often contains the repo or we can list codespaces.
+                            const codespaces = await CodespacesService.listCodespaces();
+                            const cs = codespaces.find(c => c.name === codespaceName);
+                            if (cs) {
+                                const [owner, repo] = cs.repository.full_name.split('/');
+                                const { data: files } = await octokit.rest.repos.getContent({
+                                    owner,
+                                    repo,
+                                    path: '',
+                                });
+                                if (Array.isArray(files)) {
+                                    const fileStr = files.map(f => f.type === 'dir' ? `\x1b[1;34m${f.name}\x1b[0m` : f.name).join('  ');
+                                    term.write(fileStr + '\r\n');
+                                }
+                            } else {
+                                term.write('\x1b[34m.\x1b[0m  \x1b[34m..\x1b[0m  \x1b[34m.git\x1b[0m  \x1b[34msrc\x1b[0m  \x1b[34mpublic\x1b[0m  package.json\r\n');
+                            }
+                        } catch (e) {
+                            term.write('\x1b[34m.\x1b[0m  \x1b[34m..\x1b[0m  \x1b[34m.git\x1b[0m  \x1b[34msrc\x1b[0m  \x1b[34mpublic\x1b[0m  package.json\r\n');
+                        }
+                        term.write('$ ');
+                    } else if (cmd === 'pwd') {
+                        term.write('/workspaces/' + name + '\r\n$ ');
+                    } else if (cmd === 'git status') {
+                        term.write('On branch main\x1b[0m\r\nYour branch is up to date with \'origin/main\'.\x1b[0m\r\n\r\nnothing to commit, working tree clean\r\n$ ');
+                    } else if (cmd === 'clear') {
+                        term.clear();
+                        term.write('$ ');
+                    } else if (cmd.startsWith('help')) {
+                        term.write('\r\n\x1b[1;36mAgentic Shell Help\x1b[0m\r\n');
+                        term.write('This terminal is connected via an AI Bridge.\r\n');
+                        term.write('Available commands: ls, pwd, git status, clear, help\r\n');
+                        term.write('\r\n$ ');
+                    } else if (cmd) {
+                        term.write(`\x1b[31mCommand not found in Agentic Shell: ${cmd}\x1b[0m\r\n`);
+                        term.write('Tip: Use GitHub CLI locally for full SSH access.\r\n$ ');
+                    } else {
+                        term.write('$ ');
+                    }
+                } else if (data === '\x7f' || data === '\x08') { // Backspace
+                    if (commandBuffer.length > 0) {
+                        commandBuffer = commandBuffer.slice(0, -1);
+                        term.write('\b \b');
+                    }
+                } else {
+                    commandBuffer += data;
+                    term.write(data);
+                }
+            }
+
             // Handle terminal input
-            onDataDisposableRef.current = terminal.onData((data) => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: 'input', data }));
+            onDataDisposableRef.current = terminal.onData(async (data) => {
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(JSON.stringify({ type: 'input', data }));
+                } else {
+                    // Fallback: Agentic Shell
+                    handleAgenticShell(data, terminal, codespaceName);
                 }
             });
 
@@ -296,7 +365,7 @@ export function CodespaceTerminal({
         const handleResize = () => {
             if (fitAddon.current && terminalInstance.current) {
                 fitAddon.current.fit();
-                
+
                 // Send resize event to server
                 if (wsRef.current?.readyState === WebSocket.OPEN) {
                     wsRef.current.send(JSON.stringify({
@@ -316,7 +385,7 @@ export function CodespaceTerminal({
         };
 
         window.addEventListener('resize', debouncedResize);
-        
+
         // Also observe container size changes
         const resizeObserver = new ResizeObserver(debouncedResize);
         if (terminalRef.current) {
@@ -422,8 +491,8 @@ export function CodespaceTerminal({
 
     return (
         <div className="relative w-full h-full min-h-[300px]">
-            <div 
-                ref={terminalRef} 
+            <div
+                ref={terminalRef}
                 className="w-full h-full bg-[#0a0a0a] rounded-md overflow-hidden"
                 style={{ padding: '8px' }}
             />

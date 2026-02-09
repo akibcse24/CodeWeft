@@ -56,7 +56,7 @@ export function useMLNotes() {
           content: typeof note.content === 'string' ? note.content : JSON.stringify(note.content || defaultContent),
           category: note.category || "general",
           tags: note.tags || [],
-          icon: (note as any).icon || "🧠",
+          icon: note.icon || "🧠",
           user_id: user.id,
         }])
         .select()

@@ -23,7 +23,8 @@ export type EventType =
     | "code_executed"
     | "repository_cloned"
     | "file_created"
-    | "file_deleted";
+    | "file_deleted"
+    | "open_codespace_terminal";
 
 export interface Event {
     id: string;
@@ -259,6 +260,15 @@ class EventBusService {
             type: "user_active",
             data: {},
             source: "system",
+            userId
+        });
+    }
+
+    async emitCodespaceTerminal(codespaceName: string, userId?: string): Promise<void> {
+        await this.emit({
+            type: "open_codespace_terminal",
+            data: { codespaceName },
+            source: "agent",
             userId
         });
     }

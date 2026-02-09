@@ -173,6 +173,27 @@ export function FloatedAIBot() {
                     resultMessage = `🔍 **Search Results for "${res.query}":**\n${searchResults.slice(0, 5).map((r: { title: string; type: string }) => `• ${r.title} (${r.type})`).join("\n") || "No results found"}`;
                 } else if (parsed.action === "create_habit" && res?.name) {
                     resultMessage = `🎯 Created habit: **${res.name}** (${res.frequency || "daily"})`;
+                } else if (parsed.action === "list_github_repositories" && Array.isArray(result)) {
+                    resultMessage = `📦 **GitHub Repositories (${result.length}):**\n${(result as { name: string; private: boolean; language: string | null }[]).slice(0, 8).map((r) => `• **${r.name}**${r.private ? " 🔒" : ""} - ${r.language || "No language"}`).join("\n")}${result.length > 8 ? `\n... and ${result.length - 8} more` : ""}`;
+                } else if (parsed.action === "list_github_workflows" && Array.isArray(result)) {
+                    resultMessage = `⚙️ **Workflows for ${parsed.params.repo}:**\n${(result as { name: string; state: string }[]).map((w) => `• ${w.name} (\`${w.state}\`)`).join("\n") || "No workflows found"}`;
+                } else if (parsed.action === "get_github_file_content" && res?.content) {
+                    const fileName = (res.name as string) || "file";
+                    resultMessage = `📄 **${fileName}** in \`${parsed.params.owner}/${parsed.params.repo}\`:\n\n\`\`\`${fileName.split('.').pop()}\n${res.content}\n\`\`\``;
+                } else if (parsed.action === "list_codespaces" && Array.isArray(result)) {
+                    resultMessage = `💻 **GitHub Codespaces (${result.length}):**\n${(result as { name: string; state: string; repository: { full_name: string }; machine?: { display_name: string } }[]).map((c) => `• **${c.name}** (${c.state === 'Available' ? '🟢 Running' : '🔴 ' + c.state})\n  └ ${c.repository.full_name} • ${c.machine?.display_name || 'Standard'}`).join('\n')}`;
+                } else if (parsed.action === "start_codespace" && (res as { success: boolean })?.success) {
+                    resultMessage = `🚀 Codespace **${parsed.params.name}** is starting up...`;
+                } else if (parsed.action === "stop_codespace" && (res as { success: boolean })?.success) {
+                    resultMessage = `🛑 Codespace **${parsed.params.name}** has been stopped.`;
+                } else if (parsed.action === "open_codespace_terminal") {
+                    resultMessage = `📟 Opening terminal for **${parsed.params.name}**...`;
+                } else if (parsed.action === "search_github_code" && Array.isArray(result)) {
+                    resultMessage = `🔍 **GitHub Code Search Results (${result.length}):**\n${(result as { name: string; repository: { full_name: string } }[]).map((r) => `• **${r.name}** in ${r.repository.full_name}`).join("\n") || "No code found"}`;
+                } else if (parsed.action === "list_github_branches" && Array.isArray(result)) {
+                    resultMessage = `🌿 **Branches in ${parsed.params.repo}:**\n${(result as { name: string }[]).map((b) => `• ${b.name}`).join("\n")}`;
+                } else if (parsed.action === "get_github_profile" && res?.login) {
+                    resultMessage = `👤 **GitHub Profile: ${res.name || res.login}**\n• Bio: ${res.bio || "No bio"}\n• Repos: ${res.public_repos}\n• Followers: ${res.followers}\n• URL: ${res.html_url}`;
                 }
 
                 setMessages(prev => [...prev, {

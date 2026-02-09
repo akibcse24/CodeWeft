@@ -318,21 +318,211 @@ export const agentTools: ToolDefinition[] = [
         }
     },
     {
-        name: "get_github_repositories",
-        description: "Get list of GitHub repositories.",
-        parameters: { type: "object", properties: {} }
-    },
-    {
-        name: "create_gist",
-        description: "Create a new GitHub gist.",
+        name: "list_github_repositories",
+        description: "Get list of all GitHub repositories for the authenticated user.",
         parameters: {
             type: "object",
             properties: {
-                filename: { type: "string", description: "The gist filename." },
-                content: { type: "string", description: "The gist content." },
-                description: { type: "string", description: "Gist description." }
+                sort: { type: "string", enum: ["created", "updated", "pushed", "full_name"], description: "The property to sort by." },
+                direction: { type: "string", enum: ["asc", "desc"], description: "The order to sort by." }
+            }
+        }
+    },
+    {
+        name: "create_github_repository",
+        description: "Create a new GitHub repository.",
+        parameters: {
+            type: "object",
+            properties: {
+                name: { type: "string", description: "The name of the new repository." },
+                description: { type: "string", description: "A short description of the repository." },
+                private: { type: "boolean", description: "Whether the repository should be private." }
+            },
+            required: ["name"]
+        }
+    },
+    {
+        name: "list_github_gists",
+        description: "Get a list of all your GitHub Gists.",
+        parameters: { type: "object", properties: {} }
+    },
+    {
+        name: "create_github_gist",
+        description: "Create a new code snippet (GitHub Gist).",
+        parameters: {
+            type: "object",
+            properties: {
+                filename: { type: "string", description: "The name of the file." },
+                content: { type: "string", description: "The code content." },
+                description: { type: "string", description: "Gist description." },
+                is_public: { type: "boolean", description: "Whether the gist is public." }
             },
             required: ["filename", "content"]
+        }
+    },
+    {
+        name: "get_github_profile",
+        description: "Get your GitHub profile details and statistics.",
+        parameters: { type: "object", properties: {} }
+    },
+    {
+        name: "list_github_workflows",
+        description: "List all GitHub Actions workflows in a repository.",
+        parameters: {
+            type: "object",
+            properties: {
+                owner: { type: "string", description: "The owner of the repository." },
+                repo: { type: "string", description: "The name of the repository." }
+            },
+            required: ["owner", "repo"]
+        }
+    },
+    {
+        name: "trigger_github_workflow",
+        description: "Trigger a GitHub Actions workflow.",
+        parameters: {
+            type: "object",
+            properties: {
+                owner: { type: "string", description: "The owner of the repository." },
+                repo: { type: "string", description: "The name of the repository." },
+                workflow_id: { type: "string", description: "The ID or filename of the workflow." },
+                ref: { type: "string", description: "The reference (branch/tag) to trigger it on." }
+            },
+            required: ["owner", "repo", "workflow_id"]
+        }
+    },
+    {
+        name: "get_github_file_content",
+        description: "Get the content of a file from a GitHub repository.",
+        parameters: {
+            type: "object",
+            properties: {
+                owner: { type: "string", description: "The owner of the repository." },
+                repo: { type: "string", description: "The name of the repository." },
+                path: { type: "string", description: "The path to the file." },
+                ref: { type: "string", description: "The branch, tag, or commit SHA." }
+            },
+            required: ["owner", "repo", "path"]
+        }
+    },
+    {
+        name: "update_github_file",
+        description: "Update or create a file in a GitHub repository.",
+        parameters: {
+            type: "object",
+            properties: {
+                owner: { type: "string", description: "The owner of the repository." },
+                repo: { type: "string", description: "The name of the repository." },
+                path: { type: "string", description: "The path to the file." },
+                content: { type: "string", description: "The new content of the file." },
+                message: { type: "string", description: "The commit message." },
+                branch: { type: "string", description: "The target branch." },
+                sha: { type: "string", description: "The blob SHA (required for updates)." }
+            },
+            required: ["owner", "repo", "path", "content", "message"]
+        }
+    },
+    {
+        name: "list_github_branches",
+        description: "List all branches in a GitHub repository.",
+        parameters: {
+            type: "object",
+            properties: {
+                owner: { type: "string", description: "The owner of the repository." },
+                repo: { type: "string", description: "The name of the repository." }
+            },
+            required: ["owner", "repo"]
+        }
+    },
+    {
+        name: "list_github_pull_requests",
+        description: "List pull requests for a GitHub repository.",
+        parameters: {
+            type: "object",
+            properties: {
+                owner: { type: "string", description: "The owner of the repository." },
+                repo: { type: "string", description: "The name of the repository." },
+                state: { type: "string", enum: ["open", "closed", "all"], description: "The state of PRs." }
+            },
+            required: ["owner", "repo"]
+        }
+    },
+    {
+        name: "create_github_pull_request",
+        description: "Create a new pull request on GitHub.",
+        parameters: {
+            type: "object",
+            properties: {
+                owner: { type: "string", description: "The owner of the repository." },
+                repo: { type: "string", description: "The name of the repository." },
+                title: { type: "string", description: "The title of the PR." },
+                head: { type: "string", description: "The branch where your changes are implemented." },
+                base: { type: "string", description: "The branch you want your changes pulled into." },
+                body: { type: "string", description: "The description of the PR." }
+            },
+            required: ["owner", "repo", "title", "head"]
+        }
+    },
+    {
+        name: "search_github_code",
+        description: "Search for code snippets on GitHub.",
+        parameters: {
+            type: "object",
+            properties: {
+                query: { type: "string", description: "The search query." }
+            },
+            required: ["query"]
+        }
+    },
+    {
+        name: "list_codespaces",
+        description: "List all your GitHub Codespaces.",
+        parameters: { type: "object", properties: {} }
+    },
+    {
+        name: "start_codespace",
+        description: "Start a GitHub Codespace.",
+        parameters: {
+            type: "object",
+            properties: {
+                name: { type: "string", description: "The name of the codespace." }
+            },
+            required: ["name"]
+        }
+    },
+    {
+        name: "stop_codespace",
+        description: "Stop a GitHub Codespace.",
+        parameters: {
+            type: "object",
+            properties: {
+                name: { type: "string", description: "The name of the codespace." }
+            },
+            required: ["name"]
+        }
+    },
+    {
+        name: "open_codespace_terminal",
+        description: "Open the in-browser terminal for a specific codespace.",
+        parameters: {
+            type: "object",
+            properties: {
+                name: { type: "string", description: "The name of the codespace." }
+            },
+            required: ["name"]
+        }
+    },
+    {
+        name: "create_codespace",
+        description: "Create a new GitHub Codespace for a repository.",
+        parameters: {
+            type: "object",
+            properties: {
+                owner: { type: "string", description: "The owner of the repository." },
+                repo: { type: "string", description: "The name of the repository." },
+                branch: { type: "string", description: "The branch name." }
+            },
+            required: ["owner", "repo"]
         }
     }
 ];
@@ -690,13 +880,138 @@ export const handleToolCall = async (toolName: string, args: Record<string, any>
                 response: args.response || args.query
             };
         }
+        case "list_github_repositories": {
+            const { listUserRepositories } = await import("./github/repository.service");
+            return await listUserRepositories({
+                sort: args.sort as any || "updated",
+                direction: args.direction as any || "desc"
+            });
+        }
+        case "create_github_repository": {
+            const { createRepository } = await import("./github/repository.service");
+            return await createRepository(args.name as string, {
+                description: args.description as string,
+                private: args.private as boolean
+            });
+        }
+        case "list_github_gists": {
+            const { listGists } = await import("./github/gist.service");
+            return await listGists();
+        }
+        case "create_github_gist": {
+            const { createGist } = await import("./github/gist.service");
+            return await createGist(
+                { [args.filename as string]: { content: args.content as string } },
+                args.description as string || "",
+                args.is_public !== false
+            );
+        }
+        case "list_github_workflows": {
+            const { listWorkflows } = await import("./github/actions.service");
+            return await listWorkflows(args.owner as string, args.repo as string);
+        }
+        case "trigger_github_workflow": {
+            const { triggerWorkflow } = await import("./github/actions.service");
+            return await triggerWorkflow(
+                args.owner as string,
+                args.repo as string,
+                args.workflow_id as string,
+                (args.ref as string) || "main"
+            );
+        }
+        case "get_github_file_content": {
+            const { getFileContent } = await import("./github/git.service");
+            const data = await getFileContent(
+                args.owner as string,
+                args.repo as string,
+                args.path as string,
+                (args.ref as string) || "main"
+            );
+            // Decode base64 content
+            if (data.content && data.encoding === "base64") {
+                try {
+                    data.content = decodeURIComponent(escape(atob(data.content.replace(/\n/g, ""))));
+                } catch (e) {
+                    console.error("Failed to decode base64 content", e);
+                }
+            }
+            return data;
+        }
+        case "update_github_file": {
+            const { updateFile } = await import("./github/git.service");
+            return await updateFile(
+                args.owner as string,
+                args.repo as string,
+                args.path as string,
+                args.content as string,
+                args.message as string,
+                (args.branch as string) || "main",
+                args.sha as string
+            );
+        }
+        case "list_github_branches": {
+            const { listBranches } = await import("./github/git.service");
+            return await listBranches(args.owner as string, args.repo as string);
+        }
+        case "list_github_pull_requests": {
+            const { listPullRequests } = await import("./github/git.service");
+            return await listPullRequests(
+                args.owner as string,
+                args.repo as string,
+                args.state as any || "open"
+            );
+        }
+        case "create_github_pull_request": {
+            const { createPullRequest } = await import("./github/git.service");
+            return await createPullRequest(
+                args.owner as string,
+                args.repo as string,
+                args.title as string,
+                args.head as string,
+                (args.base as string) || "main",
+                args.body as string
+            );
+        }
+        case "search_github_code": {
+            const { getOctokit } = await import("./github/octokit.service");
+            const octokit = await getOctokit();
+            const { data } = await octokit.rest.search.code({
+                q: args.query as string,
+            });
+            return data.items;
+        }
+        case "list_codespaces": {
+            const { listCodespaces } = await import("./github/codespaces.service");
+            return await listCodespaces();
+        }
+        case "start_codespace": {
+            const { startCodespace } = await import("./github/codespaces.service");
+            return await startCodespace(args.name as string);
+        }
+        case "stop_codespace": {
+            const { stopCodespace } = await import("./github/codespaces.service");
+            return await stopCodespace(args.name as string);
+        }
+        case "create_codespace": {
+            const { createCodespace } = await import("./github/codespaces.service");
+            return await createCodespace(
+                args.owner as string,
+                args.repo as string,
+                args.branch as string
+            );
+        }
+        case "open_codespace_terminal": {
+            // Emitting event for the UI to handle
+            await eventBus.emitCodespaceTerminal(args.name as string);
+            return { success: true, message: `Opening terminal for ${args.name}` };
+        }
         case "get_current_url":
-        case "list_workflows":
-        case "trigger_workflow":
+            return {
+                url: window.location.href,
+                path: window.location.pathname
+            };
         case "get_settings":
         case "update_settings":
-        case "get_github_repositories":
-        case "create_gist":
             return {
                 action: toolName,
                 params: args,

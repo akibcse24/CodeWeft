@@ -91,8 +91,7 @@ export async function mergeBranches(
     base: string,
     head: string,
     commitMessage?: string
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<any> {
+): Promise<unknown> {
     return withRetry(async () => {
         const octokit = await getOctokit();
         const { data } = await octokit.repos.merge({
@@ -216,7 +215,7 @@ export async function updateFile(
     branch = 'main',
     sha?: string // Required for updates, not for create
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<any> {
+): Promise<unknown> {
     return withRetry(async () => {
         const octokit = await getOctokit();
 
@@ -247,8 +246,7 @@ export async function deleteFile(
     message: string,
     sha: string,
     branch = 'main'
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<any> {
+): Promise<unknown> {
     return withRetry(async () => {
         const octokit = await getOctokit();
         const { data } = await octokit.repos.deleteFile({
@@ -383,5 +381,71 @@ export async function getLatestCommitSha(
             ref: `heads/${branch}`,
         });
         return data.object.sha;
+    });
+}
+
+/**
+ * Create a pull request
+ */
+export async function createPullRequest(
+    owner: string,
+    repo: string,
+    title: string,
+    head: string,
+    base = 'main',
+    body?: string
+): Promise<unknown> {
+    return withRetry(async () => {
+        const octokit = await getOctokit();
+        const { data } = await octokit.rest.pulls.create({
+            owner,
+            repo,
+            title,
+            head,
+            base,
+            body,
+        });
+        return data;
+    });
+}
+
+/**
+ * List pull requests for a repository
+ */
+export async function listPullRequests(
+    owner: string,
+    repo: string,
+    state: 'open' | 'closed' | 'all' = 'open'
+): Promise<unknown[]> {
+    return withRetry(async () => {
+        const octokit = await getOctokit();
+        const { data } = await octokit.rest.pulls.list({
+            owner,
+            repo,
+            state,
+            per_page: 50,
+        });
+        return data;
+    });
+}
+
+/**
+ * Merge a pull request
+ */
+export async function mergePullRequest(
+    owner: string,
+    repo: string,
+    pullNumber: number,
+    commitMessage?: string
+): Promise<unknown> {
+    return withRetry(async () => {
+        const octokit = await getOctokit();
+        const { data } = await octokit.rest.pulls.merge({
+            owner,
+            repo,
+            pull_number: pullNumber,
+            commit_message: commitMessage,
+        });
+        return data;
     });
 }

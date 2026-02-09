@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { supabase } from "@/integrations/supabase/client";
 import { getEmbedding } from "./ai.service";
 import { storeVector, searchVectors } from "./vector.service";
@@ -6,9 +5,9 @@ import { storeVector, searchVectors } from "./vector.service";
 export interface ShortTermMemoryItem {
     id: string;
     type: "conversation" | "action" | "event" | "state";
-    content: any;
+    content: unknown;
     timestamp: number;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
 }
 
 export interface LongTermMemoryItem {
@@ -59,9 +58,9 @@ class MemoryService {
         return items;
     }
 
-    async storeLongTerm(content: string, metadata: Omit<LongTermMemoryItem["metadata"], "lastAccessed">): Promise<string> {
+    async storeLongTerm(content: string, metadata: Omit<LongTermMemoryItem["metadata"], "lastAccessed">, customId?: string): Promise<string> {
         const embedding = await getEmbedding(content);
-        const id = `ltm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const id = customId || `ltm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
         await storeVector({
             id,
@@ -88,7 +87,7 @@ class MemoryService {
         }));
     }
 
-    async updateUserPreferences(preferences: Record<string, any>): Promise<void> {
+    async updateUserPreferences(preferences: Record<string, unknown>): Promise<void> {
         await this.storeLongTerm(
             JSON.stringify(preferences),
             {
@@ -99,7 +98,7 @@ class MemoryService {
         );
     }
 
-    async getUserPreferences(): Promise<Record<string, any> | null> {
+    async getUserPreferences(): Promise<Record<string, unknown> | null> {
         const results = await this.searchLongTerm("user preferences", 1);
         if (results.length > 0) {
             try {
@@ -111,7 +110,7 @@ class MemoryService {
         return null;
     }
 
-    async rememberPattern(pattern: string, context: Record<string, any>): Promise<void> {
+    async rememberPattern(pattern: string, context: Record<string, unknown>): Promise<void> {
         await this.storeLongTerm(
             `Pattern: ${pattern}\nContext: ${JSON.stringify(context)}`,
             {
@@ -129,7 +128,7 @@ class MemoryService {
             .map(r => r.content);
     }
 
-    async learnFromAction(action: string, outcome: "success" | "failure", context?: Record<string, any>): Promise<void> {
+    async learnFromAction(action: string, outcome: "success" | "failure", context?: Record<string, unknown>): Promise<void> {
         const importance = outcome === "success" ? 0.7 : 0.4;
         await this.storeLongTerm(
             `Action: ${action}\nOutcome: ${outcome}\nContext: ${context ? JSON.stringify(context) : "none"}`,
@@ -183,9 +182,9 @@ class MemoryService {
     }
 
     async clearLongTerm(userId: string): Promise<void> {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { error } = await (supabase as any)
-            .from("vectors")
+        const { error } = await supabase
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .from("vectors" as any)
             .delete()
             .eq("user_id", userId);
 

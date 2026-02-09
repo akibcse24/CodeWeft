@@ -18,11 +18,12 @@ export class CodeweftStore extends Dexie {
     secrets_vault!: Table<Tables<"secrets_vault">>;
     github_settings!: Table<Tables<"github_settings">>;
     profiles!: Table<Tables<"profiles">>;
+    deleted_pages!: Table<Tables<"deleted_pages">>;
     sync_queue!: Table<{
         id?: number;
         table: string;
         action: 'insert' | 'update' | 'delete';
-        data: any;
+        data: Record<string, unknown>;
         timestamp: number;
     }>;
 
@@ -45,6 +46,7 @@ export class CodeweftStore extends Dexie {
             secrets_vault: 'id, user_id, category, updated_at',
             github_settings: 'id, user_id, updated_at',
             profiles: 'id, user_id, username, updated_at',
+            deleted_pages: 'id, user_id, deleted_at, permanently_delete_at',
             sync_queue: '++id, table, action, timestamp'
         });
     }

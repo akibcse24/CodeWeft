@@ -75,7 +75,7 @@ export default function Settings() {
       toast({ title: "Error", description: "Please enter a GitHub token first.", variant: "destructive" });
       return;
     }
-    
+
     try {
       const result = await testConnection.mutateAsync(githubToken);
       if (result.valid && result.user) {
@@ -85,9 +85,10 @@ export default function Settings() {
         setGithubTestResult({ valid: false });
         toast({ title: "Invalid Token", description: result.error || "Could not authenticate with GitHub.", variant: "destructive" });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       setGithubTestResult({ valid: false });
-      toast({ title: "Connection Failed", description: error.message || "Failed to test GitHub connection.", variant: "destructive" });
+      const errorMessage = error instanceof Error ? error.message : "Failed to test GitHub connection.";
+      toast({ title: "Connection Failed", description: errorMessage, variant: "destructive" });
     }
   };
 
@@ -96,13 +97,13 @@ export default function Settings() {
       toast({ title: "Error", description: "Please enter a valid GitHub token.", variant: "destructive" });
       return;
     }
-    
+
     // Test connection first if not already tested
     if (!githubTestResult?.valid) {
       await handleTestGithubToken();
       if (!githubTestResult?.valid) return;
     }
-    
+
     try {
       await saveGitHubSettings.mutateAsync({
         github_token: githubToken,
@@ -112,8 +113,9 @@ export default function Settings() {
       setGithubToken("");
       setGithubTestResult(null);
       toast({ title: "GitHub Connected", description: "Your GitHub account has been linked successfully." });
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to save GitHub settings.", variant: "destructive" });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to save GitHub settings.";
+      toast({ title: "Error", description: errorMessage, variant: "destructive" });
     }
   };
 
@@ -121,8 +123,9 @@ export default function Settings() {
     try {
       await disconnectGitHub.mutateAsync();
       toast({ title: "GitHub Disconnected", description: "Your GitHub account has been unlinked." });
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to disconnect GitHub.", variant: "destructive" });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to disconnect GitHub.";
+      toast({ title: "Error", description: errorMessage, variant: "destructive" });
     }
   };
 
@@ -140,7 +143,7 @@ export default function Settings() {
 
   const handleClearLocalData = async () => {
     if (!confirm("Are you sure you want to clear all local data? This cannot be undone.")) return;
-    
+
     try {
       await db.delete();
       localStorage.clear();
@@ -157,7 +160,7 @@ export default function Settings() {
       const tasks = await db.tasks.toArray();
       const mlNotes = await db.ml_notes.toArray();
       const dsaProblems = await db.dsa_problems.toArray();
-      
+
       const exportData = {
         exportedAt: new Date().toISOString(),
         pages,
@@ -165,7 +168,7 @@ export default function Settings() {
         mlNotes,
         dsaProblems,
       };
-      
+
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -173,7 +176,7 @@ export default function Settings() {
       a.download = `codeweft-export-${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      
+
       toast({ title: "Data Exported", description: "Your data has been downloaded." });
     } catch (error) {
       toast({ title: "Export Failed", description: "Could not export data.", variant: "destructive" });
@@ -259,8 +262,8 @@ export default function Settings() {
                     onChange={(e) => setUsername(e.target.value)}
                     disabled={profileLoading}
                   />
-                  <Button 
-                    onClick={handleSaveUsername} 
+                  <Button
+                    onClick={handleSaveUsername}
                     className="h-10 gap-2"
                     disabled={updateProfile.isPending || username === profile?.username}
                   >
@@ -427,9 +430,9 @@ export default function Settings() {
                     setGithubTestResult(null);
                   }}
                 />
-                <Button 
+                <Button
                   variant="outline"
-                  onClick={handleTestGithubToken} 
+                  onClick={handleTestGithubToken}
                   className="h-10 shrink-0 gap-2"
                   disabled={testConnection.isPending || !githubToken.trim()}
                 >
@@ -442,15 +445,15 @@ export default function Settings() {
                   ) : null}
                   Test
                 </Button>
-                <Button 
-                  onClick={handleSaveGithubToken} 
+                <Button
+                  onClick={handleSaveGithubToken}
                   className="h-10 shrink-0"
                   disabled={saveGitHubSettings.isPending || !githubToken.trim()}
                 >
                   {saveGitHubSettings.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Connect'}
                 </Button>
               </div>
-              
+
               {/* Test Result Preview */}
               {githubTestResult?.valid && githubTestResult.username && (
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
@@ -464,7 +467,7 @@ export default function Settings() {
                   </div>
                 </div>
               )}
-              
+
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
                   Required scopes: <code className="bg-muted px-1 py-0.5 rounded">repo</code>, <code className="bg-muted px-1 py-0.5 rounded">gist</code>, <code className="bg-muted px-1 py-0.5 rounded">read:user</code>, <code className="bg-muted px-1 py-0.5 rounded">workflow</code>, <code className="bg-muted px-1 py-0.5 rounded">codespace</code>
@@ -485,8 +488,8 @@ export default function Settings() {
           {/* Disconnect Button - Only show if connected */}
           {hasGithubConnection && (
             <div className="flex justify-end">
-              <Button 
-                variant="destructive" 
+              <Button
+                variant="destructive"
                 size="sm"
                 onClick={handleRemoveGithubToken}
                 disabled={disconnectGitHub.isPending}
@@ -560,9 +563,9 @@ export default function Settings() {
               onCheckedChange={setReducedMotion}
             />
           </div>
-          
+
           <Separator />
-          
+
           <div className="space-y-3">
             <Label className="text-base font-medium">Data Management</Label>
             <div className="flex flex-wrap gap-3">
@@ -579,9 +582,9 @@ export default function Settings() {
               Export your data as JSON or clear all locally stored data.
             </p>
           </div>
-          
+
           <Separator />
-          
+
           <div className="text-sm text-muted-foreground flex items-center gap-2 p-3 rounded-lg bg-muted/30">
             <Info className="h-4 w-4" />
             <span>Data is synced between local storage and the cloud when signed in.</span>

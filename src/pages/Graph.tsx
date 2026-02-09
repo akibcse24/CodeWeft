@@ -1,16 +1,25 @@
-import { useRef, useMemo, useState } from 'react';
+import { useRef, useMemo, useState, useEffect } from 'react';
 import { usePages } from '@/hooks/usePages';
 import { useGraphSimulation } from '@/hooks/useGraphSimulation';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Minus, Plus, Maximize, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { getAllVectors, cosineSimilarity, VectorDocument } from '@/services/vector.service';
+import { BrainCircuit, Link2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function GraphView() {
     const { pages, isLoading } = usePages();
     const containerRef = useRef<HTMLDivElement>(null);
     const navigate = useNavigate();
     const [zoom, setZoom] = useState(1);
+    const [vectors, setVectors] = useState<VectorDocument[]>([]);
+    const [showSemanticLinks, setShowSemanticLinks] = useState(true);
+
+    useEffect(() => {
+        getAllVectors().then(setVectors);
+    }, []);
 
     // Calculate dimensions
     const width = containerRef.current?.offsetWidth || 800;
@@ -18,24 +27,43 @@ export function GraphView() {
 
     // Extract links
     const links = useMemo(() => {
-        const result: { source: string; target: string }[] = [];
+        const result: { source: string; target: string; type: 'explicit' | 'semantic' }[] = [];
         const pageIds = new Set(pages.map(p => p.id));
 
+        // Explicit Links
         pages.forEach(sourcePage => {
-            // Very basic link extraction from content string (same as useBacklinks logic)
-            // Ideally we lift this extraction logic to a common util
             const content = JSON.stringify(sourcePage.content);
             pages.forEach(targetPage => {
                 if (sourcePage.id === targetPage.id) return;
-
-                // Matches page://id which is what we insert
                 if (content.includes(`page://${targetPage.id}`)) {
-                    result.push({ source: sourcePage.id, target: targetPage.id });
+                    result.push({ source: sourcePage.id, target: targetPage.id, type: 'explicit' });
                 }
             });
         });
+
+        // Semantic Links
+        if (showSemanticLinks) {
+            for (let i = 0; i < vectors.length; i++) {
+                for (let j = i + 1; j < vectors.length; j++) {
+                    const sim = cosineSimilarity(vectors[i].embedding, vectors[j].embedding);
+                    if (sim > 0.85) {
+                        const id1 = vectors[i].id.replace("note_", "");
+                        const id2 = vectors[j].id.replace("note_", "");
+
+                        // Only add if both pages exist and not already linked explicitly
+                        if (pageIds.has(id1) && pageIds.has(id2)) {
+                            const exists = result.find(l => (l.source === id1 && l.target === id2) || (l.source === id2 && l.target === id1));
+                            if (!exists) {
+                                result.push({ source: id1, target: id2, type: 'semantic' });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         return result;
-    }, [pages]);
+    }, [pages, vectors, showSemanticLinks]);
 
     const nodes = useGraphSimulation(pages, links, width, height);
 
@@ -59,6 +87,15 @@ export function GraphView() {
                 </Button>
                 <Button variant="outline" size="icon" onClick={() => setZoom(1)}>
                     <Maximize className="h-4 w-4" />
+                </Button>
+                <div className="h-4" />
+                <Button
+                    variant={showSemanticLinks ? "default" : "outline"}
+                    size="icon"
+                    onClick={() => setShowSemanticLinks(!showSemanticLinks)}
+                    title="Toggle Semantic Links"
+                >
+                    <BrainCircuit className="h-4 w-4" />
                 </Button>
             </div>
 
@@ -89,9 +126,12 @@ export function GraphView() {
                                 x2={target.x}
                                 y2={target.y}
                                 stroke="currentColor"
-                                strokeOpacity="0.2"
-                                strokeWidth="1.5"
-                            // markerEnd="url(#arrowhead)" // Optional: arrows
+                                strokeOpacity={link.type === 'explicit' ? 0.3 : 0.15}
+                                strokeWidth={link.type === 'explicit' ? 2 : 1}
+                                strokeDasharray={link.type === 'semantic' ? "4 4" : "0"}
+                                className={cn(
+                                    link.type === 'explicit' ? "text-primary/70" : "text-purple-500/50"
+                                )}
                             />
                         );
                     })}

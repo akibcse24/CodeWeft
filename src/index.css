@@ -64,16 +64,17 @@
     --radius: 0.75rem;
 
     /* Sidebar - Light Mode Default */
-    --sidebar-background: 0 0% 98%;
-    /* Light Grey */
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 14% 16%;
     --sidebar-primary: 221 83% 53%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217 91% 60%;
-    --sidebar-muted: 240 4.8% 95.9%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 221 83% 53%;
+    --sidebar-muted: 215 16% 47%;
+    --sidebar-active-glow: 221 83% 53% / 0.15;
+    --sidebar-item-radius: 12px;
 
     /* Charts */
     --chart-1: 221 83% 53%;
@@ -145,15 +146,17 @@
     --ring: 217 91% 60%;
 
     /* Sidebar */
-    --sidebar-background: 222 47% 4%;
-    --sidebar-foreground: 210 40% 98%;
+    --sidebar-background: 224 71% 4%;
+    --sidebar-foreground: 213 31% 91%;
     --sidebar-primary: 217 91% 60%;
     --sidebar-primary-foreground: 222 47% 6%;
     --sidebar-accent: 217 33% 12%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 12%;
+    --sidebar-border: 217 33% 14%;
     --sidebar-ring: 217 91% 60%;
     --sidebar-muted: 215 20% 65%;
+    --sidebar-active-glow: 217 91% 60% / 0.2;
+    --sidebar-item-radius: 12px;
 
     /* Charts */
     --chart-1: 217 91% 60%;
@@ -297,7 +300,16 @@
 
   /* Glass morphism effect */
   .glass {
-    @apply bg-background/80 backdrop-blur-lg border border-border/50;
+    @apply bg-background/80 backdrop-blur-xl border border-border/50;
+  }
+
+  .sidebar-glass {
+    background: linear-gradient(180deg, 
+      hsla(var(--sidebar-background) / 0.95) 0%, 
+      hsla(var(--sidebar-background) / 0.85) 100%
+    );
+    backdrop-filter: blur(20px) saturate(180%);
+    border-right: 1px solid hsla(var(--sidebar-border) / 0.4);
   }
 
   .glass-card {
@@ -440,6 +452,30 @@
 
 .cm-editor .cm-scroller {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* Sidebar Specific Animations & Effects */
+.sidebar-item-active {
+  background: linear-gradient(90deg, 
+    hsla(var(--primary) / 0.1) 0%, 
+    transparent 100%
+  );
+  box-shadow: inset 2px 0 0 0 hsl(var(--primary));
+}
+
+.sidebar-glow-hover:hover {
+  background: radial-gradient(circle at center, hsla(var(--primary) / 0.08) 0%, transparent 70%);
+}
+
+.sidebar-section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, 
+    transparent 0%, 
+    hsla(var(--sidebar-border) / 0.6) 20%, 
+    hsla(var(--sidebar-border) / 0.6) 80%, 
+    transparent 100%
+  );
+  margin: 1.25rem 0.5rem;
 }
 
 /* Animations */

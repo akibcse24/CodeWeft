@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, FileText, Search, Star, MoreHorizontal, Trash2, Loader2,
-  Tag, X, Filter, SortAsc, FolderPlus, Clock, Database, Maximize2, Minimize2, Sparkles, BarChart2, List
+  Tag, X, Filter, SortAsc, FolderPlus, Clock, Database, Maximize2, Minimize2, Sparkles, BarChart2, List, Link2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,9 @@ import { runAgentLoop } from "@/services/agent.service";
 import { extractTextFromBlocks } from "@/lib/block-utils";
 import { useAuth } from "@/hooks/useAuth";
 import { QuickFind } from "@/components/editor/QuickFind";
+import { useResonance } from "@/hooks/useResonance";
+import { ResonancePanel } from "@/components/notes/ResonancePanel";
+import { memoryService } from "@/services/memory.service";
 import { EDITOR_SHORTCUTS, matchesShortcut } from "@/lib/ShortcutRegistry";
 
 type SortOption = "updated" | "created" | "title";
@@ -88,8 +91,13 @@ export default function Notes() {
   const [showAIInsights, setShowAIInsights] = useState(false);
   const [aiInsights, setAIInsights] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isIndexing, setIsIndexing] = useState(false);
   const [quickFindOpen, setQuickFindOpen] = useState(false);
   const [recentPageIds, setRecentPageIds] = useState<string[]>([]);
+  const [backlinksOpen, setBacklinksOpen] = useState(false);
+
+  const currentText = extractTextFromBlocks(blocks);
+  const { results: resonanceResults, isSearching: isResonating } = useResonance(currentText, !!selectedPageId && !isFocusMode);
 
   // Quick Find keyboard shortcut (Cmd+P / Ctrl+P)
   useEffect(() => {
@@ -192,6 +200,28 @@ export default function Notes() {
       tags: pageTags,
       cover_url: pageCover,
     });
+
+    // Semantic Indexing
+    try {
+      setIsIndexing(true);
+      const text = extractTextFromBlocks(blocks);
+      if (text.trim().length > 20) {
+        await memoryService.storeLongTerm(
+          text,
+          {
+            type: "knowledge",
+            importance: 0.5,
+            frequency: 1,
+          },
+          `note_${selectedPageId}`
+        );
+      }
+    } catch (err) {
+      console.error("Indexing failed:", err);
+    } finally {
+      setIsIndexing(false);
+    }
+
     setIsSaving(false);
   }, [selectedPageId, pageTitle, pageIcon, blocks, pageTags, pageCover, updatePage, pageProperties, pageSchema, viewType]);
 
@@ -361,6 +391,14 @@ export default function Notes() {
 
               <div className={cn(
                 "px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all duration-300",
+                isIndexing ? "text-primary/70 opacity-100" : "text-primary/70 opacity-0 w-0 overflow-hidden"
+              )}>
+                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                <span>Indexing</span>
+              </div>
+
+              <div className={cn(
+                "px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all duration-300",
                 isSaving ? "text-muted-foreground opacity-100" : "text-muted-foreground/40 opacity-100"
               )}>
                 <div className={cn("h-1.5 w-1.5 rounded-full transition-colors duration-300", isSaving ? "bg-primary" : "bg-muted-foreground/30")} />
@@ -483,7 +521,21 @@ export default function Notes() {
 
           <div className="mt-20 pt-10 border-t border-border/40 flex flex-col md:flex-row gap-8">
             <div className="flex-1">
-              <BacklinksPanel currentPageId={selectedPageId} allPages={pages} onNavigate={setSelectedPageId} />
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 rounded-xl"
+                onClick={() => setBacklinksOpen(true)}
+              >
+                <Link2 className="h-4 w-4" />
+                Show Backlinks
+              </Button>
+              <BacklinksPanel
+                pageId={selectedPageId}
+                isOpen={backlinksOpen}
+                onClose={() => setBacklinksOpen(false)}
+                onNavigate={setSelectedPageId}
+              />
             </div>
 
             <AnimatePresence>
@@ -532,6 +584,20 @@ export default function Notes() {
                     </div>
                   )}
                 </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {!isFocusMode && resonanceResults.length > 0 && (
+                <ResonancePanel
+                  results={resonanceResults}
+                  isSearching={isResonating}
+                  onNavigate={(id) => {
+                    // Extract ID from note_ID format
+                    const cleanId = id.startsWith("note_") ? id.replace("note_", "") : id;
+                    setSelectedPageId(cleanId);
+                  }}
+                />
               )}
             </AnimatePresence>
           </div>

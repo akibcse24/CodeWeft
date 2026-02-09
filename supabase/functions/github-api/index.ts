@@ -3,7 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-requested-with",
+  "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE",
 };
 
 interface GitHubRepo {
@@ -293,7 +294,7 @@ Deno.serve(async (req) => {
         }
 
         const username = settings.github_username;
-        
+
         // Use GitHub's GraphQL API to get contribution data
         const query = `
           query($username: String!) {
@@ -338,7 +339,7 @@ Deno.serve(async (req) => {
         }
 
         const data = await response.json();
-        
+
         if (data.errors) {
           console.error("GraphQL errors:", data.errors);
           return new Response(
@@ -352,7 +353,7 @@ Deno.serve(async (req) => {
 
         const calendar = data.data.user.contributionsCollection.contributionCalendar;
         const contributions: GitHubContributionDay[] = [];
-        
+
         for (const week of calendar.weeks) {
           for (const day of week.contributionDays) {
             contributions.push({
@@ -473,7 +474,7 @@ Deno.serve(async (req) => {
               },
             }
           );
-          
+
           if (!masterResponse.ok) {
             return new Response(
               JSON.stringify({ error: "Failed to fetch repo contents" }),
@@ -483,7 +484,7 @@ Deno.serve(async (req) => {
               }
             );
           }
-          
+
           const data = await masterResponse.json();
           return parseAndReturnSolutions(data, owner, repoName);
         }
@@ -533,7 +534,7 @@ function parseAndReturnSolutions(
         const pathParts = item.path.split("/");
         const fileName = pathParts[pathParts.length - 1];
         const name = fileName.replace(ext, "").replace(/[-_]/g, " ");
-        
+
         solutions.push({
           path: item.path,
           name: name,

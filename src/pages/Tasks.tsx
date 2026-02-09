@@ -353,7 +353,7 @@ export default function Tasks() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <AnimatePresence mode="popLayout">
-                  {overdueTasks.map(task => (
+                  {overdueTasks.filter(t => t.id).map(task => (
                     <TaskItem
                       key={task.id}
                       task={task}
@@ -384,8 +384,8 @@ export default function Tasks() {
               </TabsList>
             </div>
 
-            <AnimatePresence mode="wait">
-              <TabsContent value="all" className="mt-0 outline-none">
+            <AnimatePresence mode="popLayout">
+              <TabsContent value="all" key="tab-all" className="mt-0 outline-none">
                 {todoTasks.length === 0 ? (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-32 rounded-[3.5rem] border-4 border-dashed border-border/20 bg-muted/5 flex flex-col items-center justify-center text-center group">
                     <div className="w-24 h-24 rounded-full bg-primary/5 flex items-center justify-center mb-10 group-hover:scale-110 transition-transform duration-700 shadow-2xl">
@@ -400,7 +400,7 @@ export default function Tasks() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <AnimatePresence mode="popLayout">
-                      {todoTasks.map(task => (
+                      {todoTasks.filter(t => t.id).map(task => (
                         <TaskItem
                           key={task.id}
                           task={task}
@@ -414,7 +414,7 @@ export default function Tasks() {
                 )}
               </TabsContent>
 
-              <TabsContent value="today" className="mt-0 outline-none">
+              <TabsContent value="today" key="tab-today" className="mt-0 outline-none">
                 {todayTasks.length === 0 ? (
                   <div className="py-32 rounded-[3.5rem] border-2 border-dashed border-border/20 bg-muted/5 flex flex-col items-center justify-center text-center">
                     <Calendar className="w-16 h-16 text-primary/10 mb-8" />
@@ -423,7 +423,7 @@ export default function Tasks() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <AnimatePresence mode="popLayout">
-                      {todayTasks.map(task => (
+                      {todayTasks.filter(t => t.id).map(task => (
                         <TaskItem
                           key={task.id}
                           task={task}
@@ -437,7 +437,7 @@ export default function Tasks() {
                 )}
               </TabsContent>
 
-              <TabsContent value="completed" className="mt-0 outline-none">
+              <TabsContent value="completed" key="tab-completed" className="mt-0 outline-none">
                 {completedTasks.length === 0 ? (
                   <div className="py-32 rounded-[3.5rem] border-2 border-dashed border-border/20 bg-muted/5 flex flex-col items-center justify-center text-center">
                     <CheckSquare className="w-16 h-16 text-primary/10 mb-8" />
@@ -446,7 +446,7 @@ export default function Tasks() {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <AnimatePresence mode="popLayout">
-                      {completedTasks.map(task => (
+                      {completedTasks.filter(t => t.id).map(task => (
                         <TaskItem
                           key={task.id}
                           task={task}

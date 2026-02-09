@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { motion } from "framer-motion";
-import { FileText, Hash } from "lucide-react";
+import { FileText, Hash, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Page {
@@ -16,6 +16,7 @@ interface WikiLinkMenuProps {
     searchTerm: string;
     pages: Page[];
     onSelect: (page: Page) => void;
+    onCreatePage?: (title: string) => void;
     position: { top: number; left: number };
     selectedIndex: number;
 }
@@ -25,6 +26,7 @@ export function WikiLinkMenu({
     searchTerm,
     pages,
     onSelect,
+    onCreatePage,
     position,
     selectedIndex,
 }: WikiLinkMenuProps) {
@@ -34,7 +36,7 @@ export function WikiLinkMenu({
             page.tags?.some(t => t.toLowerCase().includes(searchTerm.toLowerCase()))
     ).slice(0, 10);
 
-    if (!isOpen || filteredPages.length === 0) return null;
+    if (!isOpen) return null;
 
     return (
         <motion.div
@@ -69,7 +71,21 @@ export function WikiLinkMenu({
                     </div>
                 </button>
             ))}
-            {filteredPages.length === 0 && (
+            {filteredPages.length === 0 && searchTerm && onCreatePage && (
+                <button
+                    onClick={() => onCreatePage(searchTerm)}
+                    className={cn(
+                        "w-full flex items-center gap-3 px-2 py-2 rounded-md text-sm",
+                        "hover:bg-accent transition-colors text-left text-primary"
+                    )}
+                >
+                    <div className="p-1.5 rounded bg-primary/10">
+                        <Plus className="h-4 w-4 text-primary" />
+                    </div>
+                    <span className="font-medium">Create "{searchTerm}"</span>
+                </button>
+            )}
+            {filteredPages.length === 0 && !searchTerm && (
                 <div className="px-2 py-2 text-sm text-muted-foreground">No pages found</div>
             )}
         </motion.div>

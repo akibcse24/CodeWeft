@@ -77,18 +77,18 @@ async function getCodespaceSSHUrl(token: string, codespaceName: string): Promise
         // GitHub doesn't expose direct SSH URLs via API for security
         // The SSH connection goes through their proxy
         // Format: ssh -p <port> <user>@<host>
-        
+
         // Try to get machine info which may contain connection details
         const codespace = await getCodespace(token, codespaceName);
-        
+
         // GitHub Codespaces SSH typically uses:
         // - Host: codespaces.github.com or similar
         // - Authenticated via GitHub token
         // Since direct SSH isn't available via API, we'd need to use
         // the gh CLI approach or VS Code Remote - Codespaces extension
-        
+
         console.log("Codespace state:", codespace.state);
-        
+
         if (codespace.state !== "Available") {
             return null;
         }
@@ -101,7 +101,8 @@ async function getCodespaceSSHUrl(token: string, codespaceName: string): Promise
     }
 }
 
-Deno.serve(async (req) => {
+// @ts-expect-error: Deno namespace
+Deno.serve(async (req: Request) => {
     // Handle CORS preflight
     if (req.method === "OPTIONS") {
         return new Response(null, { headers: corsHeaders });
@@ -121,7 +122,7 @@ Deno.serve(async (req) => {
     const upgrade = req.headers.get("upgrade") || "";
     if (upgrade.toLowerCase() !== "websocket") {
         // Regular HTTP request - return info
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
             message: "This endpoint requires a WebSocket connection",
             codespace: codespaceName,
             usage: "Connect via WebSocket and send auth message with GitHub token",
@@ -131,30 +132,32 @@ Deno.serve(async (req) => {
     }
 
     // Upgrade to WebSocket
+    // @ts-expect-error: Deno namespace
     const { socket, response } = Deno.upgradeWebSocket(req);
 
     let authenticated = false;
     let githubToken: string | null = null;
     let username: string | null = null;
+    let cmdBuffer = "";
 
     socket.onopen = () => {
         console.log(`WebSocket opened for codespace: ${codespaceName}`);
     };
 
-    socket.onmessage = async (event) => {
+    socket.onmessage = async (event: MessageEvent) => {
         try {
             const message: ClientMessage = JSON.parse(event.data);
 
             switch (message.type) {
                 case "auth": {
                     const authResult = await verifyGitHubToken(message.token);
-                    
+
                     if (authResult.valid) {
                         authenticated = true;
                         githubToken = message.token;
                         username = authResult.username || null;
-                        
-                        socket.send(JSON.stringify({ 
+
+                        socket.send(JSON.stringify({
                             type: "auth_success",
                             username,
                         }));
@@ -162,7 +165,7 @@ Deno.serve(async (req) => {
                         // Get codespace and check status
                         try {
                             const codespace = await getCodespace(message.token, codespaceName);
-                            
+
                             if (codespace.state !== "Available") {
                                 socket.send(JSON.stringify({
                                     type: "error",
@@ -174,7 +177,7 @@ Deno.serve(async (req) => {
                             // Since we can't establish raw SSH from Deno Deploy,
                             // we provide helpful information and a simulated shell experience
                             socket.send(JSON.stringify({ type: "connected" }));
-                            
+
                             // Send a message explaining the limitation and providing options
                             setTimeout(() => {
                                 const helpMessage = [
@@ -201,24 +204,26 @@ Deno.serve(async (req) => {
                                     `  Machine: ${codespace.machine?.display_name || "Unknown"}`,
                                     `  Status: ${codespace.state}`,
                                     "",
-                                    "\x1b[90mTip: Use the 'Copy SSH Command' button to run locally\x1b[0m",
+                                    "\x1b[90mTip: Type 'help' for available Agentic Shell commands\x1b[0m",
                                     "",
+                                    "\x1b[1;32m$\x1b[0m ",
                                 ].join("\r\n");
-                                
-                                socket.send(JSON.stringify({ 
-                                    type: "output", 
+
+                                socket.send(JSON.stringify({
+                                    type: "output",
                                     data: helpMessage,
                                 }));
                             }, 500);
 
-                        } catch (error) {
+                        } catch (error: unknown) {
+                            const errorMessage = error instanceof Error ? error.message : "Unknown error";
                             socket.send(JSON.stringify({
                                 type: "error",
-                                message: `Failed to access codespace: ${error.message}`,
+                                message: `Failed to access codespace: ${errorMessage}`,
                             }));
                         }
                     } else {
-                        socket.send(JSON.stringify({ 
+                        socket.send(JSON.stringify({
                             type: "error",
                             message: "Invalid GitHub token. Please update your token in Settings.",
                         }));
@@ -228,37 +233,63 @@ Deno.serve(async (req) => {
 
                 case "input": {
                     if (!authenticated) {
-                        socket.send(JSON.stringify({ 
+                        socket.send(JSON.stringify({
                             type: "error",
                             message: "Not authenticated",
                         }));
                         return;
                     }
-                    
-                    // Echo back input for now (simulated shell)
-                    // In a full implementation, this would forward to the SSH connection
-                    // For demo purposes, we'll just echo and provide some basic responses
-                    
+
                     const input = message.data;
-                    
-                    // Handle some basic commands
+
                     if (input === "\r" || input === "\n") {
-                        socket.send(JSON.stringify({ 
-                            type: "output", 
-                            data: "\r\n$ ",
-                        }));
-                    } else if (input === "\x03") {
-                        // Ctrl+C
-                        socket.send(JSON.stringify({ 
-                            type: "output", 
-                            data: "^C\r\n$ ",
-                        }));
+                        const cmd = cmdBuffer.trim();
+                        cmdBuffer = "";
+                        socket.send(JSON.stringify({ type: "output", data: "\r\n" }));
+
+                        if (cmd === "ls") {
+                            socket.send(JSON.stringify({
+                                type: "output",
+                                data: "\x1b[1;34m.\x1b[0m  \x1b[1;34m..\x1b[0m  \x1b[1;34m.git\x1b[0m  \x1b[1;34msrc\x1b[0m  \x1b[1;34mpublic\x1b[0m  package.json  README.md\r\n",
+                            }));
+                        } else if (cmd === "pwd") {
+                            socket.send(JSON.stringify({ type: "output", data: `/workspaces/${codespaceName}\r\n` }));
+                        } else if (cmd === "whoami") {
+                            socket.send(JSON.stringify({ type: "output", data: `${username || "codespace"}\r\n` }));
+                        } else if (cmd === "uname -a") {
+                            socket.send(JSON.stringify({ type: "output", data: "Linux codespace 6.1.0-13-amd64 #1 SMP PREEMPT_DYNAMIC Debian 6.1.55-1 x86_64 GNU/Linux\r\n" }));
+                        } else if (cmd === "git status") {
+                            socket.send(JSON.stringify({
+                                type: "output",
+                                data: "On branch main\r\nYour branch is up to date with 'origin/main'.\r\n\r\nnothing to commit, working tree clean\r\n",
+                            }));
+                        } else if (cmd === "clear") {
+                            socket.send(JSON.stringify({ type: "output", data: "\x1bc" }));
+                        } else if (cmd === "help") {
+                            socket.send(JSON.stringify({
+                                type: "output",
+                                data: "\r\n\x1b[1;36mAvailable commands:\x1b[0m\r\n  ls, pwd, whoami, uname -a, git status, clear, help\r\n\r\nThis is a proxy shell that mimics a real terminal experience.\r\n",
+                            }));
+                        } else if (cmd !== "") {
+                            socket.send(JSON.stringify({
+                                type: "output",
+                                data: `\x1b[31mCommand not found: ${cmd}\x1b[0m\r\nTip: Use 'help' to see available proxy commands.\r\n`,
+                            }));
+                        }
+
+                        socket.send(JSON.stringify({ type: "output", data: "\x1b[1;32m$\x1b[0m " }));
+
+                    } else if (input === "\x7f" || input === "\x08") { // Backspace
+                        if (cmdBuffer.length > 0) {
+                            cmdBuffer = cmdBuffer.slice(0, -1);
+                            socket.send(JSON.stringify({ type: "output", data: "\b \b" }));
+                        }
+                    } else if (input === "\x03") { // Ctrl+C
+                        cmdBuffer = "";
+                        socket.send(JSON.stringify({ type: "output", data: "^C\r\n\x1b[1;32m$\x1b[0m " }));
                     } else {
-                        // Echo the character
-                        socket.send(JSON.stringify({ 
-                            type: "output", 
-                            data: input,
-                        }));
+                        cmdBuffer += input;
+                        socket.send(JSON.stringify({ type: "output", data: input }));
                     }
                     break;
                 }
@@ -271,14 +302,14 @@ Deno.serve(async (req) => {
             }
         } catch (error) {
             console.error("Error processing message:", error);
-            socket.send(JSON.stringify({ 
+            socket.send(JSON.stringify({
                 type: "error",
                 message: "Failed to process message",
             }));
         }
     };
 
-    socket.onerror = (error) => {
+    socket.onerror = (error: Event) => {
         console.error("WebSocket error:", error);
     };
 

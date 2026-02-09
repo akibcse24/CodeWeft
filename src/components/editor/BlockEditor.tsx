@@ -9,7 +9,8 @@ import {
   Link, ToggleLeft, Bookmark, Info, ChevronDown, ChevronRight, Columns2, Columns3,
   Database, FileText, CheckSquare, ListOrdered, Type, Heading1, Heading2,
   Heading3, List, Code, Calculator, Image, Minus, Quote,
-  Layout, HelpCircle, File, MessageSquare, FileStack, Network, Sparkles, Wand2, Highlighter
+  Layout, HelpCircle, File, MessageSquare, FileStack, Network, Sparkles, Wand2, Highlighter,
+  Copy, X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,8 @@ interface BlockEditorProps {
   onChange: (blocks: Block[]) => void;
   readOnly?: boolean;
   pages?: Page[]; // For wiki linking
-  onNavigate?: (pageId: string) => void; // For proper client-side navigation
+  onNavigate?: (pageId: string) => void;
+  onCreatePage?: (title: string) => void; // For proper client-side navigation
 }
 
 const blockTypes = [
@@ -134,6 +136,7 @@ interface BlockItemContentProps {
   onTurnInto: (type: BlockType) => void;
   onCopyLink: () => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => void;
+  onPaste?: (e: React.ClipboardEvent) => void;
   isActive: boolean;
   onFocus: () => void;
   readOnly?: boolean;
@@ -156,6 +159,7 @@ interface BlockItemContentProps {
   onCopySyncedBlock: () => void;
   getBlock: (id: string) => Block | undefined;
   onNavigate?: (pageId: string) => void;
+  onCreatePage?: (title: string) => void;
   // Context menu control
   contextMenuOpen?: boolean;
   onContextMenuOpenChange?: (open: boolean) => void;
@@ -170,11 +174,15 @@ interface SortableBlockItemProps {
   onTurnInto: (type: BlockType) => void;
   onCopyLink: () => void;
   onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => void;
+  onPaste?: (e: React.ClipboardEvent) => void;
   isActive: boolean;
   onFocus: () => void;
   readOnly?: boolean;
   dropSide?: "left" | "right" | null;
   isDragOver?: boolean;
+  // Selection state
+  isSelected?: boolean;
+  onToggleSelection?: (isCtrlClick: boolean, isShiftClick: boolean) => void;
   // State handlers needed for recursive calls
   activeBlockId: string | null;
   setActiveBlockId: (id: string | null) => void;
@@ -190,6 +198,7 @@ interface SortableBlockItemProps {
   onCopySyncedBlock: () => void;
   getBlock: (id: string) => Block | undefined;
   onNavigate?: (pageId: string) => void;
+  onCreatePage?: (title: string) => void;
   // Context menu control
   contextMenuOpen?: boolean;
   onContextMenuOpenChange?: (open: boolean) => void;
@@ -197,11 +206,12 @@ interface SortableBlockItemProps {
 
 function SortableBlockItem(props: SortableBlockItemProps) {
   const {
-    block, isActive, onFocus, readOnly, isDragOver, dropSide,
-    onChange, onDelete, onAddAfter, onDuplicate, onTurnInto, onCopyLink, onKeyDown,
+    block, isActive, onFocus, readOnly, isDragOver, dropSide, isSelected,
+    onChange, onDelete, onAddAfter, onDuplicate, onTurnInto, onCopyLink, onKeyDown, onPaste,
     activeBlockId, setActiveBlockId, updateBlock, deleteBlock, addBlockAfter,
     duplicateBlock, turnBlockInto, copyBlockLink, handleKeyDown, dragOverId,
-    copySyncedBlock, onCopySyncedBlock, onNavigate, contextMenuOpen, onContextMenuOpenChange
+    copySyncedBlock, onCopySyncedBlock, onNavigate, contextMenuOpen, onContextMenuOpenChange,
+    onToggleSelection
   } = props;
 
   const {
@@ -219,10 +229,34 @@ function SortableBlockItem(props: SortableBlockItemProps) {
     opacity: isSorting ? 0.5 : 1,
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    // Handle multi-selection
+    if (onToggleSelection && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      onToggleSelection(e.ctrlKey || e.metaKey, e.shiftKey);
+    } else {
+      onFocus();
+    }
+  };
+
   return (
-    <div ref={setNodeRef} style={style} id={`block-${block.id}`}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      id={`block-${block.id}`}
+      onClick={handleClick}
+      className={cn(
+        "relative rounded-lg transition-all",
+        isSelected && "ring-2 ring-primary/30 bg-primary/5",
+        !isSelected && isActive && "bg-muted/30"
+      )}
+    >
+      {isSelected && (
+        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-l-lg" />
+      )}
       <BlockItemContent
-        {...{ block, onChange, onDelete, onAddAfter, onDuplicate, onTurnInto, onCopyLink, onKeyDown, isActive, onFocus, readOnly, dropSide, isDragOver, onCopySyncedBlock, contextMenuOpen, onContextMenuOpenChange }}
+        {...{ block, onChange, onDelete, onAddAfter, onDuplicate, onTurnInto, onCopyLink, onKeyDown, onPaste, isActive, onFocus, readOnly, dropSide, isDragOver, onCopySyncedBlock, contextMenuOpen, onContextMenuOpenChange }}
         {...props} // Spread all recursive handlers
         dragHandleProps={{ ...attributes, ...listeners }}
       />
@@ -294,7 +328,8 @@ function BlockItemContent({
   getBlock,
   onNavigate,
   contextMenuOpen,
-  onContextMenuOpenChange
+  onContextMenuOpenChange,
+  onPaste
 }: BlockItemContentProps & { dragHandleProps?: React.HTMLAttributes<HTMLButtonElement> }) {
   const recursionHandlers = {
     activeBlockId,
@@ -387,6 +422,7 @@ function BlockItemContent({
             onKeyDown={onKeyDown}
             onFocus={onFocus}
             onClick={handleContentClick}
+            onPaste={onPaste}
             className="text-3xl font-bold outline-none w-full"
             data-placeholder="Heading 1"
             dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }}
@@ -403,6 +439,7 @@ function BlockItemContent({
             onKeyDown={onKeyDown}
             onFocus={onFocus}
             onClick={handleContentClick}
+            onPaste={onPaste}
             className="text-2xl font-semibold outline-none w-full"
             data-placeholder="Heading 2"
             dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }}
@@ -419,6 +456,7 @@ function BlockItemContent({
             onKeyDown={onKeyDown}
             onFocus={onFocus}
             onClick={handleContentClick}
+            onPaste={onPaste}
             className="text-xl font-medium outline-none w-full"
             data-placeholder="Heading 3"
             dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }}
@@ -437,6 +475,7 @@ function BlockItemContent({
               onKeyDown={onKeyDown}
               onFocus={onFocus}
               onClick={handleContentClick}
+              onPaste={onPaste}
               className="outline-none w-full"
               data-placeholder="List item"
               dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }}
@@ -456,6 +495,7 @@ function BlockItemContent({
               onKeyDown={onKeyDown}
               onFocus={onFocus}
               onClick={handleContentClick}
+              onPaste={onPaste}
               className="outline-none w-full"
               data-placeholder="List item"
               dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }}
@@ -483,6 +523,7 @@ function BlockItemContent({
               onKeyDown={onKeyDown}
               onFocus={onFocus}
               onClick={handleContentClick}
+              onPaste={onPaste}
               className={cn(
                 "outline-none w-full",
                 block.checked && "line-through text-muted-foreground"
@@ -511,6 +552,7 @@ function BlockItemContent({
               onKeyDown={onKeyDown}
               onFocus={onFocus}
               onClick={handleContentClick}
+              onPaste={onPaste}
               className="outline-none w-full"
               data-placeholder="Toggle"
               dangerouslySetInnerHTML={{ __html: sanitizeHtml(block.content) }}
@@ -879,6 +921,7 @@ function BlockItemContent({
               onKeyDown={onKeyDown}
               onFocus={onFocus}
               onClick={handleContentClick}
+              onPaste={onPaste}
               className="outline-none w-full italic text-muted-foreground text-lg"
               data-placeholder="Quote"
               dangerouslySetInnerHTML={{ __html: block.content }}
@@ -928,6 +971,7 @@ function BlockItemContent({
                 onKeyDown={onKeyDown}
                 onFocus={onFocus}
                 onClick={handleContentClick}
+                onPaste={onPaste}
                 className="outline-none w-full text-foreground"
                 data-placeholder="Callout text"
                 dangerouslySetInnerHTML={{ __html: block.content }}
@@ -983,6 +1027,7 @@ function BlockItemContent({
             onKeyDown={onKeyDown}
             onFocus={onFocus}
             onClick={handleContentClick}
+            onPaste={onPaste}
             className="outline-none w-full min-h-[24px]"
             data-placeholder="Press 'space' for AI, '/' for commands"
             dangerouslySetInnerHTML={{ __html: block.content }}
@@ -1087,7 +1132,7 @@ function BlockItemContent({
   );
 }
 
-export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], onNavigate }: BlockEditorProps) {
+export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], onNavigate, onCreatePage }: BlockEditorProps) {
   const { askAI } = useAI();
   const { user } = useAuth();
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
@@ -1114,9 +1159,23 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
   const [contextMenuOpen, setContextMenuOpen] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Initialize history when blocks change from parent
+  useEffect(() => {
+    if (historyRef.current.length === 0 ||
+      JSON.stringify(historyRef.current[historyIndexRef.current]) !== JSON.stringify(blocks)) {
+      if (historyIndexRef.current === 0) {
+        historyRef.current = [blocks];
+      }
+    }
+  }, [blocks]);
+
   // Manual AI Trigger
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [manualAiPos, setManualAiPos] = useState<{ x: number, y: number } | undefined>(undefined);
+
+  // Multi-selection state
+  const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(new Set());
+  const [lastSelectedBlockId, setLastSelectedBlockId] = useState<string | null>(null);
 
   // AI Selection
   const {
@@ -1125,6 +1184,11 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
     isVisible: isSelectionVisible,
     clearSelection
   } = useTextSelection(containerRef);
+
+  // History for undo/redo
+  const historyRef = useRef<Block[][]>([blocks]);
+  const historyIndexRef = useRef<number>(0);
+  const isUndoingRef = useRef<boolean>(false);
 
   const handleAIReplace = useCallback((text: string) => {
     document.execCommand('insertText', false, text);
@@ -1135,6 +1199,443 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
     document.execCommand('insertText', false, text);
     clearSelection();
   }, [clearSelection]);
+
+  // Block selection helpers
+  const toggleBlockSelection = useCallback((blockId: string, isCtrlClick: boolean, isShiftClick: boolean) => {
+    setSelectedBlockIds(prev => {
+      const newSelection = new Set(prev);
+
+      if (isShiftClick && lastSelectedBlockId) {
+        // Shift+click: select range
+        const allBlockIds = blocks.map(b => b.id);
+        const startIdx = allBlockIds.indexOf(lastSelectedBlockId);
+        const endIdx = allBlockIds.indexOf(blockId);
+        const [minIdx, maxIdx] = [Math.min(startIdx, endIdx), Math.max(startIdx, endIdx)];
+
+        for (let i = minIdx; i <= maxIdx; i++) {
+          newSelection.add(allBlockIds[i]);
+        }
+      } else if (isCtrlClick || isShiftClick) {
+        // Ctrl+click or Cmd+click: toggle selection
+        if (newSelection.has(blockId)) {
+          newSelection.delete(blockId);
+        } else {
+          newSelection.add(blockId);
+          setLastSelectedBlockId(blockId);
+        }
+      } else {
+        // Regular click: select only this block
+        newSelection.clear();
+        newSelection.add(blockId);
+        setLastSelectedBlockId(blockId);
+      }
+
+      return newSelection;
+    });
+  }, [blocks, lastSelectedBlockId]);
+
+  const clearBlockSelection = useCallback(() => {
+    setSelectedBlockIds(new Set());
+    setLastSelectedBlockId(null);
+  }, []);
+
+  // History management
+  const addToHistory = useCallback((newBlocks: Block[]) => {
+    if (isUndoingRef.current) return;
+
+    // Remove any future history if we're not at the end
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    }
+
+    // Add new state
+    historyRef.current.push(newBlocks);
+    historyIndexRef.current = historyRef.current.length - 1;
+
+    // Limit history size
+    if (historyRef.current.length > 50) {
+      historyRef.current.shift();
+      historyIndexRef.current--;
+    }
+  }, []);
+
+  const undo = useCallback(() => {
+    if (historyIndexRef.current > 0) {
+      isUndoingRef.current = true;
+      historyIndexRef.current--;
+      const previousBlocks = historyRef.current[historyIndexRef.current];
+      onChange(previousBlocks);
+      setTimeout(() => {
+        isUndoingRef.current = false;
+      }, 0);
+    }
+  }, [onChange]);
+
+  const redo = useCallback(() => {
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      isUndoingRef.current = true;
+      historyIndexRef.current++;
+      const nextBlocks = historyRef.current[historyIndexRef.current];
+      onChange(nextBlocks);
+      setTimeout(() => {
+        isUndoingRef.current = false;
+      }, 0);
+    }
+  }, [onChange]);
+
+  // Indent/Outdent helpers
+  const indentBlock = useCallback((blockId: string) => {
+    const blockIndex = blocks.findIndex(b => b.id === blockId);
+    if (blockIndex <= 0) return;
+
+    const currentBlock = blocks[blockIndex];
+    const prevBlock = blocks[blockIndex - 1];
+
+    // Move current block as child of previous block
+    const newPrevBlock = {
+      ...prevBlock,
+      children: [...(prevBlock.children || []), currentBlock],
+      isOpen: true
+    };
+
+    const newBlocks = [...blocks];
+    newBlocks[blockIndex - 1] = newPrevBlock;
+    newBlocks.splice(blockIndex, 1);
+
+    addToHistory(newBlocks);
+    onChange(newBlocks);
+  }, [blocks, onChange, addToHistory]);
+
+  const outdentBlock = useCallback((blockId: string) => {
+    // Find parent block that contains this block as a child
+    let parentBlock: Block | null = null;
+    let parentIndex = -1;
+    let childIndex = -1;
+
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (b.children) {
+        const idx = b.children.findIndex(child => child.id === blockId);
+        if (idx !== -1) {
+          parentBlock = b;
+          parentIndex = i;
+          childIndex = idx;
+          break;
+        }
+      }
+    }
+
+    if (!parentBlock || childIndex === -1) return;
+
+    const blockToMove = parentBlock.children![childIndex];
+
+    // Remove from parent
+    const newParentBlock = {
+      ...parentBlock,
+      children: parentBlock.children!.filter((_, idx) => idx !== childIndex)
+    };
+
+    // Insert after parent
+    const newBlocks = [...blocks];
+    newBlocks[parentIndex] = newParentBlock;
+    newBlocks.splice(parentIndex + 1, 0, blockToMove);
+
+    addToHistory(newBlocks);
+    onChange(newBlocks);
+  }, [blocks, onChange, addToHistory]);
+
+  // Merge blocks helper
+  const mergeWithPrevious = useCallback((blockId: string) => {
+    const currentIndex = blocks.findIndex(b => b.id === blockId);
+    if (currentIndex <= 0) return false;
+
+    const currentBlock = blocks[currentIndex];
+    const prevBlock = blocks[currentIndex - 1];
+
+    // Merge content
+    const mergedContent = prevBlock.content + (currentBlock.content ? " " + currentBlock.content : "");
+
+    const newBlocks = [...blocks];
+    newBlocks[currentIndex - 1] = { ...prevBlock, content: mergedContent };
+    newBlocks.splice(currentIndex, 1);
+
+    addToHistory(newBlocks);
+    onChange(newBlocks);
+
+    // Focus previous block
+    setTimeout(() => {
+      setActiveBlockId(prevBlock.id);
+      const prevBlockElement = document.getElementById(`block-${prevBlock.id}`);
+      if (prevBlockElement) {
+        const contentDiv = prevBlockElement.querySelector('[contenteditable="true"]') as HTMLElement;
+        if (contentDiv) {
+          contentDiv.focus();
+          // Move cursor to end
+          const range = document.createRange();
+          const selection = window.getSelection();
+          range.selectNodeContents(contentDiv);
+          range.collapse(false);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+        }
+      }
+    }, 50);
+
+    return true;
+  }, [blocks, onChange, addToHistory]);
+
+  // Convert inline markdown to HTML
+  const parseInlineMarkdown = useCallback((text: string): string => {
+    let html = text;
+
+    // Bold: **text** or __text__
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
+
+    // Italic: *text* or _text_ (but not already processed bold)
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    html = html.replace(/_(.*?)_/g, '<em>$1</em>');
+
+    // Inline code: `code`
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+    // Links: [text](url)
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">$1</a>');
+
+    // Strikethrough: ~~text~~
+    html = html.replace(/~~(.*?)~~/g, '<del>$1</del>');
+
+    return html;
+  }, []);
+
+  // Markdown paste parser
+  const parseMarkdownToBlocks = useCallback((markdown: string): Block[] => {
+    const lines = markdown.split('\n');
+    const newBlocks: Block[] = [];
+    let currentListType: 'bulletList' | 'numberedList' | null = null;
+    let currentListItems: Block[] = [];
+    let inCodeBlock = false;
+    let codeBlockContent: string[] = [];
+    let codeBlockLang = 'javascript';
+
+    const flushList = () => {
+      if (currentListItems.length > 0) {
+        // Add all list items as individual blocks
+        newBlocks.push(...currentListItems);
+        currentListItems = [];
+        currentListType = null;
+      }
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      // Handle empty lines
+      if (!trimmed) {
+        if (inCodeBlock) {
+          codeBlockContent.push('');
+        } else {
+          flushList();
+        }
+        continue;
+      }
+
+      // Code blocks
+      if (trimmed.startsWith('```')) {
+        if (!inCodeBlock) {
+          // Starting code block
+          inCodeBlock = true;
+          codeBlockContent = [];
+          codeBlockLang = trimmed.slice(3).trim() || 'javascript';
+          flushList();
+        } else {
+          // Ending code block
+          inCodeBlock = false;
+          newBlocks.push({
+            id: generateId(),
+            type: 'code',
+            content: codeBlockContent.join('\n'),
+            language: codeBlockLang
+          });
+        }
+        continue;
+      }
+
+      if (inCodeBlock) {
+        codeBlockContent.push(line);
+        continue;
+      }
+
+      // Headers
+      if (trimmed.startsWith('# ')) {
+        flushList();
+        newBlocks.push({
+          id: generateId(),
+          type: 'heading1',
+          content: parseInlineMarkdown(trimmed.slice(2))
+        });
+        continue;
+      }
+      if (trimmed.startsWith('## ')) {
+        flushList();
+        newBlocks.push({
+          id: generateId(),
+          type: 'heading2',
+          content: parseInlineMarkdown(trimmed.slice(3))
+        });
+        continue;
+      }
+      if (trimmed.startsWith('### ')) {
+        flushList();
+        newBlocks.push({
+          id: generateId(),
+          type: 'heading3',
+          content: parseInlineMarkdown(trimmed.slice(4))
+        });
+        continue;
+      }
+      if (trimmed.startsWith('#### ')) {
+        flushList();
+        newBlocks.push({
+          id: generateId(),
+          type: 'heading3',
+          content: parseInlineMarkdown(trimmed.slice(5))
+        });
+        continue;
+      }
+
+      // Todo checkboxes
+      if (trimmed.match(/^- \[[ xX]\] /)) {
+        flushList();
+        const checked = trimmed.match(/^- \[[xX]\]/) !== null;
+        const content = parseInlineMarkdown(trimmed.slice(6));
+        newBlocks.push({ id: generateId(), type: 'todo', content, checked });
+        continue;
+      }
+
+      // Bullet lists
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+        const content = parseInlineMarkdown(trimmed.slice(2));
+        currentListItems.push({ id: generateId(), type: 'bulletList', content });
+        continue;
+      }
+
+      // Numbered lists
+      const numberedMatch = trimmed.match(/^(\d+)\.\s(.+)$/);
+      if (numberedMatch) {
+        const content = parseInlineMarkdown(numberedMatch[2]);
+        currentListItems.push({ id: generateId(), type: 'numberedList', content });
+        continue;
+      }
+
+      // Blockquote
+      if (trimmed.startsWith('> ')) {
+        flushList();
+        newBlocks.push({
+          id: generateId(),
+          type: 'quote',
+          content: parseInlineMarkdown(trimmed.slice(2))
+        });
+        continue;
+      }
+
+      // Divider
+      if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
+        flushList();
+        newBlocks.push({ id: generateId(), type: 'divider', content: '' });
+        continue;
+      }
+
+      // Toggle (custom syntax: >!)
+      if (trimmed.startsWith('>!')) {
+        flushList();
+        newBlocks.push({
+          id: generateId(),
+          type: 'toggle',
+          content: parseInlineMarkdown(trimmed.slice(2).trim()),
+          isOpen: false
+        });
+        continue;
+      }
+
+      // Default to paragraph
+      flushList();
+      newBlocks.push({
+        id: generateId(),
+        type: 'paragraph',
+        content: parseInlineMarkdown(trimmed)
+      });
+    }
+
+    // Flush any remaining list items
+    flushList();
+
+    // Handle unclosed code block
+    if (inCodeBlock && codeBlockContent.length > 0) {
+      newBlocks.push({
+        id: generateId(),
+        type: 'code',
+        content: codeBlockContent.join('\n'),
+        language: codeBlockLang
+      });
+    }
+
+    return newBlocks;
+  }, [parseInlineMarkdown]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent, blockId: string) => {
+    const text = e.clipboardData.getData('text');
+    const currentBlock = blocks.find(b => b.id === blockId);
+
+    if (!currentBlock || !text) return;
+
+    // Check if it looks like markdown with block-level patterns
+    const hasBlockMarkdown = /^(#{1,6}\s|^-\s|^\*\s|^\d+\.\s|^>\s|^```|^---|^\*\*\*|^___|^-\s*\[[\sxX]\]\s)/m.test(text);
+
+    // Check for inline markdown patterns
+    const hasInlineMarkdown = /(\*\*.*?\*\*|__.*?__|\*.*?\*|_.*?_|`[^`]+`|\[.*?\]\(.*?\)|~~.*?~~)/.test(text);
+
+    // Single line paste with inline markdown - convert inline only
+    if (!text.includes('\n') && hasInlineMarkdown) {
+      e.preventDefault();
+      const html = parseInlineMarkdown(text);
+      document.execCommand('insertHTML', false, html);
+      return;
+    }
+
+    // Multi-line markdown paste
+    if (hasBlockMarkdown && text.includes('\n')) {
+      e.preventDefault();
+      const parsedBlocks = parseMarkdownToBlocks(text);
+
+      if (parsedBlocks.length > 0) {
+        const currentIndex = blocks.findIndex(b => b.id === blockId);
+        const newBlocks = [...blocks];
+
+        // If current block is empty, replace it entirely
+        // Otherwise, merge first parsed block with current content
+        if (!currentBlock.content || currentBlock.content === '<br>' || currentBlock.content === '') {
+          newBlocks[currentIndex] = parsedBlocks[0];
+        } else {
+          // Keep current block type but append parsed content
+          const firstBlock = parsedBlocks[0];
+          newBlocks[currentIndex] = {
+            ...currentBlock,
+            content: currentBlock.content + ' ' + firstBlock.content
+          };
+        }
+
+        // Insert remaining blocks after
+        if (parsedBlocks.length > 1) {
+          newBlocks.splice(currentIndex + 1, 0, ...parsedBlocks.slice(1));
+        }
+
+        addToHistory(newBlocks);
+        onChange(newBlocks);
+      }
+    }
+  }, [blocks, onChange, addToHistory, parseMarkdownToBlocks, parseInlineMarkdown]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1215,7 +1716,18 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
     }
 
     // Handle slash command
-    if (e.key === "/" && block.content === "") {
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.SLASH_MENU)) {
+      e.preventDefault();
+      setSlashMenuOpen(true);
+      setSlashSearchTerm(block.content.startsWith("/") ? block.content.substring(1) : "");
+      setSelectedMenuIndex(0);
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      setMenuPosition({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
+      return;
+    }
+
+    // Also trigger slash menu on "/" when block is empty
+    if (e.key === "/" && block.content === "" && !slashMenuOpen) {
       setSlashMenuOpen(true);
       setSlashSearchTerm("");
       setSelectedMenuIndex(0);
@@ -1229,8 +1741,85 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
       addBlockAfter(blockId);
     }
 
-    // Handle Backspace on empty block
+    // Handle Arrow Up/Down to navigate between blocks
+    if (e.key === "ArrowUp" && !e.shiftKey && !slashMenuOpen && !wikiMenuOpen && !mentionMenuOpen) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        // If cursor is at the beginning of the block
+        if (range.startOffset === 0) {
+          e.preventDefault();
+          const currentIndex = blocks.findIndex(b => b.id === blockId);
+          if (currentIndex > 0) {
+            const prevBlockId = blocks[currentIndex - 1].id;
+            setTimeout(() => {
+              setActiveBlockId(prevBlockId);
+              const prevBlockElement = document.getElementById(`block-${prevBlockId}`);
+              if (prevBlockElement) {
+                const contentDiv = prevBlockElement.querySelector('[contenteditable="true"]') as HTMLElement;
+                if (contentDiv) {
+                  contentDiv.focus();
+                  // Move cursor to end
+                  const range = document.createRange();
+                  const selection = window.getSelection();
+                  range.selectNodeContents(contentDiv);
+                  range.collapse(false);
+                  selection?.removeAllRanges();
+                  selection?.addRange(range);
+                }
+              }
+            }, 10);
+          }
+        }
+      }
+    }
+
+    if (e.key === "ArrowDown" && !e.shiftKey && !slashMenuOpen && !wikiMenuOpen && !mentionMenuOpen) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const textContent = (e.target as HTMLElement).innerText || "";
+        // If cursor is at the end of the block
+        if (range.endOffset === textContent.length) {
+          e.preventDefault();
+          const currentIndex = blocks.findIndex(b => b.id === blockId);
+          if (currentIndex < blocks.length - 1) {
+            const nextBlockId = blocks[currentIndex + 1].id;
+            setTimeout(() => {
+              setActiveBlockId(nextBlockId);
+              const nextBlockElement = document.getElementById(`block-${nextBlockId}`);
+              if (nextBlockElement) {
+                const contentDiv = nextBlockElement.querySelector('[contenteditable="true"]') as HTMLElement;
+                if (contentDiv) {
+                  contentDiv.focus();
+                  // Move cursor to start
+                  const range = document.createRange();
+                  const selection = window.getSelection();
+                  range.selectNodeContents(contentDiv);
+                  range.collapse(true);
+                  selection?.removeAllRanges();
+                  selection?.addRange(range);
+                }
+              }
+            }, 10);
+          }
+        }
+      }
+    }
+
+    // Handle Backspace - merge with previous or delete empty block
     const textContent = (e.target as HTMLElement).innerText || "";
+    const selection = window.getSelection();
+    const isAtStart = !selection || selection.anchorOffset === 0;
+
+    if (e.key === "Backspace" && isAtStart && textContent !== "") {
+      e.preventDefault();
+      // Try to merge with previous block
+      if (mergeWithPrevious(blockId)) {
+        return;
+      }
+    }
+
     if (e.key === "Backspace" && textContent === "" && blocks.length > 1) {
       e.preventDefault();
       // Find the index of the current block
@@ -1309,6 +1898,46 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
       copyBlockLink(blockId);
     }
 
+    // Delete block
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.DELETE)) {
+      e.preventDefault();
+      const currentIndex = blocks.findIndex(b => b.id === blockId);
+      if (currentIndex >= 0) {
+        // Focus next block if available, otherwise previous
+        const nextBlockId = currentIndex < blocks.length - 1
+          ? blocks[currentIndex + 1].id
+          : currentIndex > 0
+            ? blocks[currentIndex - 1].id
+            : null;
+
+        deleteBlock(blockId);
+
+        if (nextBlockId) {
+          setTimeout(() => {
+            setActiveBlockId(nextBlockId);
+            const nextBlockElement = document.getElementById(`block-${nextBlockId}`);
+            if (nextBlockElement) {
+              const contentDiv = nextBlockElement.querySelector('[contenteditable="true"]') as HTMLElement;
+              if (contentDiv) {
+                contentDiv.focus();
+                // Move cursor to start if going forward, end if going backward
+                const range = document.createRange();
+                const selection = window.getSelection();
+                const textContent = contentDiv.textContent || "";
+                if (currentIndex < blocks.length - 1) {
+                  range.collapse(true); // Start
+                } else {
+                  range.collapse(false); // End
+                }
+                selection?.removeAllRanges();
+                selection?.addRange(range);
+              }
+            }
+          }, 50);
+        }
+      }
+    }
+
     // Ask AI
     if (matchesShortcut(e, EDITOR_SHORTCUTS.ASK_AI)) {
       e.preventDefault();
@@ -1321,45 +1950,118 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
       }
     }
 
-    // Handle Indentation with Tab
-    if (e.key === "Tab") {
+    // Inline Code (Ctrl+E)
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.INLINE_CODE)) {
       e.preventDefault();
-      if (e.shiftKey) {
-        // Outdent: move block to parent level after the current parent
-        // This requires recursive state manipulation
-        // For now, let's keep it simple and focus on indent
-      } else {
-        // Indent: move block as child of previous sibling
-        const allBlocksAtThisLevel = blocks; // Simplified, in reality would be the siblings
-        const currentIndex = allBlocksAtThisLevel.findIndex(b => b.id === blockId);
-        if (currentIndex > 0) {
-          const prevSibling = allBlocksAtThisLevel[currentIndex - 1];
-          const currentBlock = allBlocksAtThisLevel[currentIndex];
-
-          // Move currentBlock to prevSibling.children
-          const newPrevSibling = {
-            ...prevSibling,
-            children: [...(prevSibling.children || []), currentBlock],
-            isOpen: true
-          };
-
-          // Update blocks: remove currentBlock, replace prevSibling
-          const newBlocks = [...allBlocksAtThisLevel];
-          newBlocks.splice(currentIndex, 1);
-          newBlocks[currentIndex - 1] = newPrevSibling;
-
-          onChange(newBlocks);
+      document.execCommand("italic", false);
+      const currentContent = block.content || "";
+      if (!currentContent.startsWith("`") && !currentContent.endsWith("`")) {
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          const range = selection.getRangeAt(0);
+          const selectedText = range.toString();
+          if (selectedText) {
+            document.execCommand("insertText", false, `\`${selectedText}\``);
+          }
         }
       }
     }
 
+    // Add Link (Ctrl+K)
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.ADD_LINK)) {
+      e.preventDefault();
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const selectedText = range.toString();
+        const url = prompt("Enter URL:", selectedText.startsWith("http") ? selectedText : "https://");
+        if (url) {
+          const linkHtml = `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">${selectedText || url}</a>`;
+          document.execCommand("insertHTML", false, linkHtml);
+        }
+      }
+    }
+
+    // Turn into shortcuts (Ctrl+Alt+0-9)
+    if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey && e.key >= "0" && e.key <= "9") {
+      e.preventDefault();
+      const keyToType: Record<string, BlockType> = {
+        "0": "paragraph",
+        "1": "heading1",
+        "2": "heading2",
+        "3": "heading3",
+        "4": "todo",
+        "5": "bulletList",
+        "6": "numberedList",
+        "7": "toggle",
+        "8": "code",
+        "9": "quote",
+      };
+      const targetType = keyToType[e.key];
+      if (targetType) {
+        turnBlockInto(blockId, targetType);
+      }
+    }
+
+    // Toggle shortcut (Ctrl+Alt+T)
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.TURN_INTO_TOGGLE)) {
+      e.preventDefault();
+      turnBlockInto(blockId, "toggle");
+    }
+
+    // Handle Indentation with Tab
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.INDENT) || matchesShortcut(e, EDITOR_SHORTCUTS.OUTDENT)) {
+      e.preventDefault();
+      if (e.shiftKey) {
+        // Outdent
+        outdentBlock(blockId);
+      } else {
+        // Indent
+        indentBlock(blockId);
+      }
+    }
+
+    // Undo/Redo
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.UNDO)) {
+      e.preventDefault();
+      undo();
+    }
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.REDO)) {
+      e.preventDefault();
+      redo();
+    }
+
+    // Select all blocks (Ctrl+A when block is focused)
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.SELECT_ALL)) {
+      e.preventDefault();
+      const selection = window.getSelection();
+      const target = e.target as HTMLElement;
+
+      // If there's text selected in the block, select all text
+      if (selection && selection.toString().length > 0) {
+        // Let default behavior handle text selection
+        return;
+      }
+
+      // Otherwise, select all blocks
+      if (target.isContentEditable) {
+        setSelectedBlockIds(new Set(blocks.map(b => b.id)));
+      }
+    }
+
     // Alt+Up/Down for moving blocks
-    if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.MOVE_UP)) {
       e.preventDefault();
       const currentIndex = blocks.findIndex(b => b.id === blockId);
-      const newIndex = e.key === "ArrowUp"
-        ? Math.max(0, currentIndex - 1)
-        : Math.min(blocks.length - 1, currentIndex + 1);
+      const newIndex = Math.max(0, currentIndex - 1);
+      if (newIndex !== currentIndex) {
+        onChange(arrayMove(blocks, currentIndex, newIndex));
+      }
+    }
+    if (matchesShortcut(e, EDITOR_SHORTCUTS.MOVE_DOWN)) {
+      e.preventDefault();
+      const currentIndex = blocks.findIndex(b => b.id === blockId);
+      const newIndex = Math.min(blocks.length - 1, currentIndex + 1);
       if (newIndex !== currentIndex) {
         onChange(arrayMove(blocks, currentIndex, newIndex));
       }
@@ -1718,6 +2420,73 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
         }}
       />
 
+      {/* Multi-selection toolbar */}
+      <AnimatePresence>
+        {selectedBlockIds.size > 1 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 bg-background/95 backdrop-blur-md border rounded-full shadow-xl"
+          >
+            <span className="text-xs font-medium text-muted-foreground">
+              {selectedBlockIds.size} selected
+            </span>
+            <div className="w-px h-4 bg-border" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => {
+                // Delete all selected
+                const newBlocks = blocks.filter(b => !selectedBlockIds.has(b.id));
+                addToHistory(newBlocks);
+                onChange(newBlocks);
+                clearBlockSelection();
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              Delete
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => {
+                // Duplicate all selected
+                const selectedBlocks = blocks.filter(b => selectedBlockIds.has(b.id));
+                const newBlocks = [...blocks];
+                selectedBlocks.forEach(block => {
+                  const deepClone = (b: Block): Block => ({
+                    ...b,
+                    id: Math.random().toString(36).substring(2, 9),
+                    children: b.children?.map(deepClone)
+                  });
+                  const index = newBlocks.findIndex(b => b.id === block.id);
+                  if (index !== -1) {
+                    newBlocks.splice(index + 1, 0, deepClone(block));
+                  }
+                });
+                addToHistory(newBlocks);
+                onChange(newBlocks);
+                clearBlockSelection();
+              }}
+            >
+              <Copy className="h-3.5 w-3.5 mr-1" />
+              Duplicate
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={clearBlockSelection}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div
         className="min-h-[200px] pb-32"
         onClick={(e) => {
@@ -1761,10 +2530,16 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
                   onCopyLink={() => copyBlockLink(block.id)}
                   onCopySyncedBlock={() => copySyncedBlock(block.id)}
                   onKeyDown={(e) => handleGlobalKeyDown(block.id, e)}
+                  onPaste={(e) => handlePaste(e as unknown as React.ClipboardEvent, block.id)}
                   isActive={activeBlockId === block.id}
-                  onFocus={() => setActiveBlockId(block.id)}
+                  onFocus={() => {
+                    setActiveBlockId(block.id);
+                    clearBlockSelection();
+                  }}
                   dropSide={dragOverId === block.id ? dropSide : null}
                   isDragOver={dragOverId === block.id}
+                  isSelected={selectedBlockIds.has(block.id)}
+                  onToggleSelection={(isCtrl, isShift) => toggleBlockSelection(block.id, isCtrl, isShift)}
                   contextMenuOpen={contextMenuOpen === block.id}
                   onContextMenuOpenChange={(open) => setContextMenuOpen(open ? block.id : null)}
                   {...recursionHandlers}
@@ -1909,6 +2684,7 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
             onSelect={(page) => activeBlockId && handleWikiSelect(page, activeBlockId)}
             position={menuPosition}
             selectedIndex={wikiMenuIndex}
+            onCreatePage={onCreatePage}
           />
         )}
 

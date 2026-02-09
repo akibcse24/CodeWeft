@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
@@ -51,7 +52,7 @@ interface GitHubEvent {
 }
 
 export function useGitHub() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const queryClient = useQueryClient();
 
   // Fetch GitHub settings
@@ -75,6 +76,43 @@ export function useGitHub() {
     },
     enabled: !!user,
   });
+
+  // Sync token from session if available (OAuth)
+  useEffect(() => {
+    const syncToken = async () => {
+      if (session?.provider_token && user && !settingsLoading) {
+        // If we don't have a token or it's different, sync it
+        if (!settings?.github_token || settings.github_token !== session.provider_token) {
+          try {
+            logger.info("Syncing GitHub token from session...");
+            const { data } = await supabase.functions.invoke("github-api?action=test", {
+              body: { token: session.provider_token },
+              method: "POST",
+            });
+
+            if (data?.valid) {
+              await supabase
+                .from("github_settings")
+                .upsert({
+                  user_id: user.id,
+                  github_token: session.provider_token,
+                  github_username: data.user.login,
+                  avatar_url: data.user.avatar_url,
+                  updated_at: new Date().toISOString(),
+                });
+
+              queryClient.invalidateQueries({ queryKey: ["github-settings"] });
+              logger.info("GitHub token successfully synced from session");
+            }
+          } catch (e) {
+            logger.error("Failed to sync GitHub token from session:", e);
+          }
+        }
+      }
+    };
+
+    syncToken();
+  }, [session, user, settings, settingsLoading, queryClient]);
 
   // Test connection with a token
   const testConnection = useMutation({

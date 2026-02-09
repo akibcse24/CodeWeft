@@ -12,6 +12,7 @@ import { Menu, X, Home } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useProfile } from "@/hooks/useProfile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { mainNavItems, githubNavItems, toolsNavItems } from "./AppSidebar";
 
@@ -19,6 +20,7 @@ export function MobileSidebar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const { profile } = useProfile();
 
   // Close sidebar on route change
   useEffect(() => {
@@ -129,14 +131,14 @@ export function MobileSidebar() {
         <div className="absolute bottom-0 left-0 right-0 border-t p-4 bg-background">
           <div className="flex items-center gap-3">
             <Avatar className="h-8 w-8">
-              <AvatarImage src={user?.user_metadata?.avatar_url} />
+              <AvatarImage src={profile?.avatar_url || user?.user_metadata?.avatar_url} />
               <AvatarFallback>
-                {user?.email?.charAt(0).toUpperCase() || "U"}
+                {profile?.username?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || "U"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">
-                {user?.user_metadata?.name || user?.email}
+                {profile?.username || user?.user_metadata?.name || user?.email}
               </p>
               <p className="text-xs text-muted-foreground truncate">
                 {user?.email}

@@ -69,6 +69,18 @@ export function PropertyEditor({ config, value, onChange, compact = false, readO
                         {value && <Check className="h-3 w-3 text-primary-foreground" />}
                     </div>
                 );
+            case 'formula':
+                return (
+                    <div className="flex items-center gap-1.5 text-sm font-mono bg-muted/50 px-2 py-1 rounded">
+                        <span className="text-muted-foreground">fx</span>
+                        <span className={cn(
+                            "truncate max-w-[150px]",
+                            value === '#ERROR' && "text-destructive font-medium"
+                        )}>
+                            {String(value || '0')}
+                        </span>
+                    </div>
+                );
             default:
                 return <span>{String(value)}</span>;
         }

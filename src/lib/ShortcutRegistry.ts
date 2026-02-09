@@ -187,6 +187,41 @@ export const EDITOR_SHORTCUTS: Record<string, Shortcut> = {
         keyBinding: { key: 'ArrowDown', altKey: true },
         description: 'Move block down'
     },
+    UNDO: {
+        id: 'undo',
+        label: 'Undo',
+        keys: 'Ctrl+Z',
+        keyBinding: { key: 'z', ctrlKey: true, metaKey: true },
+        description: 'Undo last action'
+    },
+    REDO: {
+        id: 'redo',
+        label: 'Redo',
+        keys: 'Ctrl+Shift+Z',
+        keyBinding: { key: 'z', ctrlKey: true, metaKey: true, shiftKey: true },
+        description: 'Redo last undone action'
+    },
+    SELECT_ALL: {
+        id: 'selectAll',
+        label: 'Select All',
+        keys: 'Ctrl+A',
+        keyBinding: { key: 'a', ctrlKey: true, metaKey: true },
+        description: 'Select all blocks or text'
+    },
+    INDENT: {
+        id: 'indent',
+        label: 'Indent',
+        keys: 'Tab',
+        keyBinding: { key: 'Tab' },
+        description: 'Indent block'
+    },
+    OUTDENT: {
+        id: 'outdent',
+        label: 'Outdent',
+        keys: 'Shift+Tab',
+        keyBinding: { key: 'Tab', shiftKey: true },
+        description: 'Outdent block'
+    },
 };
 
 export function matchesShortcut(e: React.KeyboardEvent, shortcut: Shortcut): boolean {

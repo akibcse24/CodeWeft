@@ -66,14 +66,14 @@ export function useDSAProblems() {
         companies: (problem.companies as string[]) || [],
         notes: problem.notes || "",
         solution: problem.solution || "",
-        solution_notes: (problem as any).solution_notes || "",
-        next_review_date: (problem as any).next_review_date || null,
+        solution_notes: problem.solution_notes || "",
+        next_review_date: problem.next_review_date || null,
         last_reviewed: null,
         review_count: 0,
-        solved_at: (problem as any).solved_at || null,
+        solved_at: problem.solved_at || null,
         space_complexity: problem.space_complexity || "",
         time_complexity: problem.time_complexity || "",
-        topics: (problem as any).topics || [],
+        topics: problem.topics || [],
         understanding_rating: problem.understanding_rating || 0,
       };
 

@@ -10,6 +10,7 @@ import { useFocusMode } from "@/contexts/FocusContext";
 import { cn } from "@/lib/utils";
 import { FloatedAIBot } from "@/components/ai/FloatedAIBot";
 import { useSync } from "@/hooks/useSync";
+import { GlobalCodespaceTerminal } from "@/components/github/codespaces/GlobalCodespaceTerminal";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -90,6 +91,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* Floating Action Groups */}
         <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3 pointer-events-none">
+          <GlobalCodespaceTerminal />
           <QuickCapture onCreateNote={handleQuickCapture} />
           <FloatedAIBot />
         </div>

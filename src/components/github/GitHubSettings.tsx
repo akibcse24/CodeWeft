@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useGitHub } from "@/hooks/useGitHub";
+import { useAuth } from "@/hooks/useAuth";
 import { GitHubAppSetup } from "./GitHubAppSetup";
 import { toast } from "sonner";
 
@@ -19,6 +20,7 @@ export function GitHubSettings() {
     saveSettings,
     disconnect,
   } = useGitHub();
+  const { signInWithGithub } = useAuth();
 
   const [token, setToken] = useState("");
   const [solutionsRepo, setSolutionsRepo] = useState(settings?.solutions_repo || "");
@@ -71,6 +73,16 @@ export function GitHubSettings() {
       setTestResult(null);
     } catch (error) {
       toast.error("Failed to save settings");
+    }
+  };
+
+  const handleOAuthConnect = async () => {
+    try {
+      const { error } = await signInWithGithub();
+      if (error) throw error;
+      // The page will redirect, token sync will happen on return (if we implement it)
+    } catch (error) {
+      toast.error("Failed to connect with GitHub");
     }
   };
 
@@ -264,6 +276,28 @@ export function GitHubSettings() {
                 )}
               </div>
             )}
+
+            <div className="flex flex-col gap-3">
+              <Button
+                onClick={handleOAuthConnect}
+                variant="default"
+                className="w-full bg-[#24292e] hover:bg-[#2c3238] text-white"
+              >
+                <Github className="h-4 w-4 mr-2" />
+                Connect with GitHub (OAuth)
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or use a token
+                  </span>
+                </div>
+              </div>
+            </div>
 
             {/* Solutions Repo (optional, for setup) */}
             <div className="space-y-2">

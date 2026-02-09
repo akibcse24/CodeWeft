@@ -159,7 +159,7 @@ function NavSection({ title, items, defaultOpen = false }: NavSectionProps) {
   const location = useLocation();
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
-  
+
   // Persistent state for collapsible sections
   const [isOpen, setIsOpen] = useState(() => {
     const saved = localStorage.getItem(`sidebar-section-${title}`);
@@ -173,18 +173,22 @@ function NavSection({ title, items, defaultOpen = false }: NavSectionProps) {
     localStorage.setItem(`sidebar-section-${title}`, JSON.stringify(open));
   };
 
-  // In collapsed mode, just show icons without collapsible groups
+  // In collapsed mode, just show icons with premium styling
   if (isCollapsed) {
     return (
-      <SidebarGroup className="py-1">
-        <SidebarMenu className="space-y-0.5">
+      <SidebarGroup className="py-2">
+        <SidebarMenu className="space-y-1.5">
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
               <SidebarMenuButton
                 asChild={item.url !== "/ai"}
                 isActive={location.pathname === item.url}
                 tooltip={item.title}
-                className="group/item relative overflow-hidden transition-all duration-200 hover:bg-sidebar-accent/40 rounded-lg h-9 justify-center"
+                className={cn(
+                  "group/item relative overflow-hidden transition-all duration-300 rounded-xl h-10 w-10 mx-auto justify-center",
+                  "hover:bg-sidebar-accent/60",
+                  location.pathname === item.url && "bg-sidebar-accent shadow-sm border border-sidebar-border/50 text-primary"
+                )}
                 onClick={(e) => {
                   if (item.url === "/ai") {
                     e.preventDefault();
@@ -193,12 +197,18 @@ function NavSection({ title, items, defaultOpen = false }: NavSectionProps) {
                 }}
               >
                 {item.url === "/ai" ? (
-                  <div className="flex items-center justify-center cursor-pointer">
-                    <item.icon className={cn("h-4 w-4 transition-colors duration-200 text-muted-foreground/70 group-hover/item:text-foreground", item.color, location.pathname === item.url && "text-primary")} />
+                  <div className="flex items-center justify-center cursor-pointer relative z-10 transition-transform duration-300 group-hover/item:scale-110">
+                    <item.icon className={cn("h-4.5 w-4.5 transition-colors duration-300", location.pathname === item.url ? "text-primary" : "text-muted-foreground/70 group-hover/item:text-primary")} />
+                    {location.pathname === item.url && (
+                      <div className="absolute inset-0 bg-primary/10 rounded-xl blur-md -z-10 animate-pulse" />
+                    )}
                   </div>
                 ) : (
-                  <Link to={item.url} className="flex items-center justify-center">
-                    <item.icon className={cn("h-4 w-4 transition-colors duration-200 text-muted-foreground/70 group-hover/item:text-foreground", item.color, location.pathname === item.url && "text-primary")} />
+                  <Link to={item.url} className="flex items-center justify-center relative z-10 transition-transform duration-300 group-hover/item:scale-110">
+                    <item.icon className={cn("h-4.5 w-4.5 transition-colors duration-300", location.pathname === item.url ? "text-primary" : "text-muted-foreground/70 group-hover/item:text-primary")} />
+                    {location.pathname === item.url && (
+                      <div className="absolute inset-0 bg-primary/10 rounded-xl blur-md -z-10 animate-pulse" />
+                    )}
                   </Link>
                 )}
               </SidebarMenuButton>
@@ -211,57 +221,86 @@ function NavSection({ title, items, defaultOpen = false }: NavSectionProps) {
 
   return (
     <Collapsible open={isOpen || hasActiveItem} onOpenChange={toggleOpen} className="group/collapsible">
-      <SidebarGroup className="py-1">
+      <SidebarGroup className="py-2">
         <SidebarGroupLabel asChild>
-          <CollapsibleTrigger className="hover:bg-sidebar-accent/30 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-all rounded-md px-2 py-1">
-            <span className="text-[10px] font-semibold tracking-wider uppercase">{title}</span>
-            <ChevronDown className="ml-auto h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180 opacity-70" />
+          <CollapsibleTrigger className="hover:bg-sidebar-accent/50 text-sidebar-foreground/60 hover:text-sidebar-foreground transition-all rounded-lg px-2 py-1.5 flex items-center group/trigger">
+            <span className="text-[10px] font-bold tracking-[0.1em] uppercase opacity-80 group-hover/trigger:opacity-100">{title}</span>
+            <div className="ml-auto flex items-center gap-2">
+              <div className="h-px w-8 bg-gradient-to-r from-sidebar-border/0 to-sidebar-border/60 group-hover/trigger:w-12 transition-all duration-300" />
+              <ChevronDown className="h-3.5 w-3.5 transition-transform duration-300 group-data-[state=open]/collapsible:rotate-180 opacity-50" />
+            </div>
           </CollapsibleTrigger>
         </SidebarGroupLabel>
         <CollapsibleContent>
-          <SidebarMenu className="mt-1 space-y-0.5">
-            {items.map((item) => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton
-                  asChild={item.url !== "/ai"}
-                  isActive={location.pathname === item.url}
-                  tooltip={item.title}
-                  className="group/item relative overflow-hidden transition-all duration-200 hover:bg-sidebar-accent/40 rounded-lg h-9"
-                  onClick={(e) => {
-                    if (item.url === "/ai") {
-                      e.preventDefault();
-                      window.dispatchEvent(new Event("toggle-ai-bot"));
-                    }
-                  }}
+          <SidebarMenu className="mt-1.5 space-y-1">
+            <AnimatePresence mode="popLayout" initial={false}>
+              {items.map((item, idx) => (
+                <motion.div
+                  key={item.title}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.03, duration: 0.2 }}
                 >
-                  {item.url === "/ai" ? (
-                    <div className="flex items-center gap-2 w-full cursor-pointer">
-                      <item.icon className={cn("h-4 w-4 transition-colors duration-200 text-muted-foreground/70 group-hover/item:text-foreground", item.color, location.pathname === item.url && "text-primary")} />
-                      <span className="font-medium text-muted-foreground/90 group-hover/item:text-foreground transition-colors text-[13px]">{item.title}</span>
-                    </div>
-                  ) : (
-                    <Link to={item.url} className="flex items-center gap-2">
-                      <item.icon className={cn("h-4 w-4 transition-colors duration-200 text-muted-foreground/70 group-hover/item:text-foreground", item.color, location.pathname === item.url && "text-primary")} />
-                      <span className="font-medium text-muted-foreground/90 group-hover/item:text-foreground transition-colors text-[13px]">{item.title}</span>
-                      {location.pathname === item.url && (
-                        <motion.div
-                          layoutId="active-nav-indicator"
-                          className="absolute left-0 top-1.5 bottom-1.5 w-0.5 bg-primary rounded-full"
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                        />
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild={item.url !== "/ai"}
+                      isActive={location.pathname === item.url}
+                      tooltip={item.title}
+                      className={cn(
+                        "group/item relative overflow-hidden transition-all duration-300 rounded-[var(--sidebar-item-radius)] h-10 px-3",
+                        "hover:bg-sidebar-accent/60 hover:translate-x-1",
+                        location.pathname === item.url && "bg-sidebar-accent/80 text-primary font-semibold shadow-sm ring-1 ring-sidebar-border/50"
                       )}
-                    </Link>
-                  )}
-                </SidebarMenuButton>
-                {item.badge && (
-                  <SidebarMenuBadge className="bg-primary/5 text-primary text-[10px] h-4 min-w-4 px-1 rounded-full font-mono border border-primary/10">
-                    {item.badge}
-                  </SidebarMenuBadge>
-                )}
-              </SidebarMenuItem>
-            ))}
+                      onClick={(e) => {
+                        if (item.url === "/ai") {
+                          e.preventDefault();
+                          window.dispatchEvent(new Event("toggle-ai-bot"));
+                        }
+                      }}
+                    >
+                      {item.url === "/ai" ? (
+                        <div className="flex items-center gap-3 w-full cursor-pointer relative z-10">
+                          <div className={cn(
+                            "flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-300 group-hover/item:scale-110",
+                            location.pathname === item.url ? "bg-primary/20 text-primary shadow-inner" : "bg-sidebar-accent/50 text-muted-foreground/80"
+                          )}>
+                            <item.icon className="h-4 w-4" />
+                          </div>
+                          <span className="text-sm tracking-tight">{item.title}</span>
+                          <div className="ml-auto">
+                            <Sparkles className="h-3 w-3 text-primary animate-pulse" />
+                          </div>
+                        </div>
+                      ) : (
+                        <Link to={item.url} className="flex items-center gap-3 w-full relative z-10">
+                          <div className={cn(
+                            "flex h-7 w-7 items-center justify-center rounded-lg transition-all duration-300 group-hover/item:scale-110",
+                            location.pathname === item.url ? "bg-primary/20 text-primary shadow-inner ring-1 ring-primary/20" : "bg-sidebar-accent/50 text-muted-foreground/80 rotate-0 group-hover/item:rotate-[-5deg]"
+                          )}>
+                            <item.icon className="h-4 w-4" />
+                          </div>
+                          <span className="text-sm tracking-tight">{item.title}</span>
+
+                          {location.pathname === item.url && (
+                            <motion.div
+                              layoutId="nav-active-indicator"
+                              className="absolute left-[-12px] top-2 bottom-2 w-1 bg-primary rounded-full shadow-[0_0_10px_rgba(var(--primary),0.5)]"
+                              initial={{ opacity: 0, scale: 0 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                            />
+                          )}
+                        </Link>
+                      )}
+                    </SidebarMenuButton>
+                    {item.badge && (
+                      <SidebarMenuBadge className="bg-primary/10 text-primary border border-primary/20 text-[10px] h-4.5 px-1.5 rounded-full font-bold shadow-sm">
+                        {item.badge}
+                      </SidebarMenuBadge>
+                    )}
+                  </SidebarMenuItem>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </SidebarMenu>
         </CollapsibleContent>
       </SidebarGroup>
@@ -336,52 +375,65 @@ export function AppSidebar({ className }: AppSidebarProps) {
   }, [navigate]);
 
   return (
-    <Sidebar collapsible="icon" className={cn("bg-sidebar-background/80 backdrop-blur-xl border-r border-sidebar-border/50 transition-all duration-300", className)}>
+    <Sidebar collapsible="icon" className={cn("sidebar-glass border-r border-sidebar-border/30 transition-all duration-500 ease-in-out", className)}>
       {/* Header */}
-      <SidebarHeader className="pb-4 pt-5 px-4 bg-transparent z-20">
-        <div className={`flex items-center gap-3 mb-2 group p-2 rounded-xl transition-all duration-200 ${isCollapsed ? "-ml-2 justify-center" : "-ml-2"}`}>
+      <SidebarHeader className="pb-4 pt-6 px-4 bg-transparent z-20 space-y-5">
+        <div className={cn(
+          "flex items-center gap-3 group p-1 relative rounded-2xl transition-all duration-500",
+          isCollapsed ? "justify-center" : "px-2"
+        )}>
           <div className="relative flex-shrink-0">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/80 to-purple-600/80 rounded-xl blur-md opacity-20 group-hover:opacity-40 transition-opacity duration-300" />
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-sidebar-accent to-background border border-white/10 shadow-lg group-hover:scale-105 transition-transform duration-300">
-              <img src="/logo.png" alt="CW" className="h-6 w-6 object-contain" />
+            <div className="absolute inset-[-4px] bg-gradient-to-br from-primary via-purple-500 to-indigo-600 rounded-2xl blur-lg opacity-0 group-hover:opacity-40 transition-all duration-700 animate-pulse" />
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sidebar-background to-sidebar-accent border border-white/20 shadow-xl group-hover:scale-110 group-hover:rotate-[5deg] transition-all duration-500 ring-1 ring-black/5">
+              <img src="/logo.png" alt="CW" className="h-7 w-7 object-contain drop-shadow-md" />
             </div>
           </div>
 
           <AnimatePresence>
             {!isCollapsed && (
               <motion.div
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
+                initial={{ opacity: 0, x: -15, filter: "blur(10px)" }}
+                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, x: -15, filter: "blur(10px)" }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
                 className="flex flex-col overflow-hidden"
               >
-                <div className="flex items-center gap-1.5 transition-colors duration-200">
-                  <span className="font-bold text-sm tracking-tight text-foreground/90 truncate">CodeWeft</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-base tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-foreground to-foreground/60">CodeWeft</span>
+                  <div className="px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[8px] font-black uppercase tracking-widest border border-primary/20">PRO</div>
                 </div>
-                <span className="text-[10px] text-muted-foreground/70 uppercase tracking-widest font-semibold truncate">Learning Hub</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[9px] text-muted-foreground/80 uppercase tracking-[0.2em] font-bold">Learning OS</span>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
-        <div className={cn("ml-auto transition-opacity duration-200", isCollapsed ? "opacity-0 w-0" : "opacity-100")}>
-          <SyncStatus />
+
+          {!isCollapsed && (
+            <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              <SyncStatus />
+            </div>
+          )}
         </div>
 
         {!isCollapsed && (
           <motion.div
-            initial={{ opacity: 0, y: -5 }}
+            initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="relative group/search cursor-pointer mt-2"
+            transition={{ delay: 0.2 }}
+            className="relative group/search cursor-pointer overflow-hidden rounded-xl"
             onClick={() => setIsOpen(true)}
           >
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60 group-hover/search:text-primary transition-colors" />
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-purple-500/5 opacity-0 group-hover/search:opacity-100 transition-opacity duration-300" />
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/40 group-hover/search:text-primary group-hover/search:scale-110 transition-all duration-300" />
             <div
-              className="h-9 bg-sidebar-accent/20 border border-sidebar-border/30 group-hover/search:border-primary/20 group-hover/search:bg-sidebar-accent/40 group-hover/search:shadow-sm pl-9 pr-2 text-xs transition-all duration-200 text-muted-foreground/80 group-hover/search:text-foreground flex items-center rounded-lg select-none backdrop-blur-sm"
+              className="h-11 bg-sidebar-accent/30 border border-sidebar-border/50 group-hover/search:border-primary/30 group-hover/search:bg-sidebar-accent/50 group-hover/search:shadow-[0_0_20px_-5px_rgba(var(--primary),0.1)] pl-10 pr-4 text-sm transition-all duration-300 text-muted-foreground/60 group-hover/search:text-foreground flex items-center select-none backdrop-blur-md font-medium"
             >
-              Search...
+              Search Command...
             </div>
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
-              <span className="text-[10px] text-muted-foreground/40 bg-background/20 px-1.5 py-0.5 rounded border border-white/5 font-mono">⌘K</span>
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none opacity-40 group-hover/search:opacity-100 transition-opacity">
+              <span className="text-[10px] font-bold tracking-tighter bg-sidebar-background/80 border border-sidebar-border/50 px-1.5 py-0.5 rounded shadow-sm">⌘K</span>
             </div>
           </motion.div>
         )}
@@ -421,64 +473,83 @@ export function AppSidebar({ className }: AppSidebarProps) {
         )}
 
         {/* Main Navigation */}
-        <SidebarGroup>
-          <SidebarMenu className="gap-1">
-            {dynamicMainNavItems.map((item) => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={location.pathname === item.url}
-                  tooltip={item.title}
-                  className={cn(
-                    "group relative overflow-hidden transition-all duration-300 hover:bg-sidebar-accent/40 data-[active=true]:bg-gradient-to-r data-[active=true]:from-primary/10 data-[active=true]:to-transparent data-[active=true]:text-primary rounded-lg py-2.5",
-                    isCollapsed && "justify-center px-2"
-                  )}
-                >
-                  <Link to={item.url} className={cn("flex items-center", isCollapsed ? "justify-center" : "gap-2")}>
-                    <item.icon className={cn("h-[18px] w-[18px] text-muted-foreground/70 group-hover:text-primary transition-colors duration-200 flex-shrink-0", location.pathname === item.url && "text-primary")} />
-                    {!isCollapsed && <span className="font-medium tracking-tight">{item.title}</span>}
-                    {location.pathname === item.url && (
-                      <motion.div
-                        layoutId="active-nav-glow"
-                        className="absolute inset-0 bg-primary/5 -z-10 rounded-lg"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                      />
+        <SidebarGroup className="py-2">
+          <SidebarMenu className="gap-1.5">
+            {dynamicMainNavItems.map((item, idx) => (
+              <motion.div
+                key={item.title}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.1 }}
+              >
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location.pathname === item.url}
+                    tooltip={item.title}
+                    className={cn(
+                      "group relative overflow-hidden transition-all duration-300 rounded-[var(--sidebar-item-radius)] h-11 px-3",
+                      "hover:bg-sidebar-accent/70 hover:translate-x-1",
+                      location.pathname === item.url && "bg-sidebar-accent shadow-sm border border-sidebar-border/50 text-primary"
                     )}
-                  </Link>
-                </SidebarMenuButton>
-                {!isCollapsed && 'badge' in item && item.badge && (
-                  <SidebarMenuBadge className="bg-primary/90 text-primary-foreground text-[10px] h-4 min-w-4 px-1 rounded shadow-lg shadow-primary/20 font-bold">
-                    {item.badge}
-                  </SidebarMenuBadge>
-                )}
-              </SidebarMenuItem>
+                  >
+                    <Link to={item.url} className={cn("flex items-center", isCollapsed ? "justify-center" : "gap-3")}>
+                      <div className={cn(
+                        "flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-500",
+                        location.pathname === item.url ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 scale-110" : "bg-sidebar-accent/50 text-muted-foreground/70 group-hover:scale-110 group-hover:bg-sidebar-accent group-hover:text-primary"
+                      )}>
+                        <item.icon className="h-[18px] w-[18px]" />
+                      </div>
+                      {!isCollapsed && <span className="font-semibold tracking-tight text-sm">{item.title}</span>}
+                      {location.pathname === item.url && (
+                        <motion.div
+                          layoutId="main-nav-glow"
+                          className="absolute inset-0 bg-primary/5 -z-10 rounded-xl"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                        />
+                      )}
+                    </Link>
+                  </SidebarMenuButton>
+                  {!isCollapsed && 'badge' in item && item.badge && (
+                    <SidebarMenuBadge className="bg-primary text-primary-foreground text-[10px] h-4.5 px-2 rounded-full shadow-lg shadow-primary/30 font-black border-2 border-sidebar-background">
+                      {item.badge}
+                    </SidebarMenuBadge>
+                  )}
+                </SidebarMenuItem>
+              </motion.div>
             ))}
           </SidebarMenu>
         </SidebarGroup>
 
+        <div className="sidebar-section-divider" />
+
         {/* Notes Tree */}
         {!isCollapsed && (
-          <Collapsible open={notesOpen} onOpenChange={toggleNotesOpen} className="group/notes">
-            <SidebarGroup className="py-1">
+          <Collapsible open={notesOpen} onOpenChange={toggleNotesOpen} className="group/notes py-2">
+            <SidebarGroup className="py-0">
               <SidebarGroupLabel asChild>
-                <CollapsibleTrigger className="hover:bg-sidebar-accent/30 text-sidebar-foreground/50 hover:text-sidebar-foreground transition-all rounded-md px-2 py-1">
-                  <span className="text-[10px] font-semibold tracking-wider uppercase">Knowledge Base</span>
-                  <div className="ml-auto flex items-center gap-1">
+                <CollapsibleTrigger className="hover:bg-sidebar-accent/50 text-sidebar-foreground/60 hover:text-sidebar-foreground transition-all rounded-lg px-2 py-1.5 flex items-center group/trigger">
+                  <span className="text-[10px] font-bold tracking-[0.1em] uppercase opacity-80 group-hover/trigger:opacity-100">Knowledge Network</span>
+                  <div className="ml-auto flex items-center gap-2">
                     <div
                       role="button"
                       onClick={(e) => { e.stopPropagation(); handleCreatePage(); }}
-                      className="opacity-0 group-hover/notes:opacity-100 hover:bg-sidebar-accent hover:text-primary rounded p-0.5 transition-all duration-200"
+                      className="opacity-0 group-hover/notes:opacity-100 hover:bg-primary/20 hover:text-primary rounded-md p-1 transition-all duration-300"
                     >
                       <Plus className="h-3 w-3" />
                     </div>
-                    <ChevronDown className="h-3.5 w-3.5 transition-transform duration-200 group-data-[state=open]/notes:rotate-180 opacity-70" />
+                    <ChevronDown className="h-3.5 w-3.5 transition-transform duration-300 group-data-[state=open]/notes:rotate-180 opacity-50" />
                   </div>
                 </CollapsibleTrigger>
               </SidebarGroupLabel>
               <CollapsibleContent>
-                <div className="pl-0 mt-1 space-y-0.5">
+                <motion.div
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="pl-2 mt-2 space-y-1 relative"
+                >
+                  <div className="absolute left-3.5 top-0 bottom-4 w-px bg-gradient-to-b from-sidebar-border/60 to-transparent" />
                   <PageTree
                     pages={pages}
                     onCreatePage={handleCreatePage}
@@ -486,7 +557,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
                     onToggleFavorite={handleToggleFavorite}
                     onSelectPage={handleSelectPage}
                   />
-                </div>
+                </motion.div>
               </CollapsibleContent>
             </SidebarGroup>
           </Collapsible>
@@ -518,7 +589,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
       </SidebarContent>
 
       {/* Footer / User Profile */}
-      <SidebarFooter className="border-t border-sidebar-border/30 p-2 bg-sidebar/30 backdrop-blur-xl z-20">
+      <SidebarFooter className="border-t border-sidebar-border/30 p-3 bg-sidebar-background/40 backdrop-blur-2xl z-20">
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -526,67 +597,79 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 <SidebarMenuButton
                   size="lg"
                   className={cn(
-                    "data-[state=open]:bg-sidebar-accent/50 data-[state=open]:text-sidebar-accent-foreground transition-all duration-200 hover:bg-sidebar-accent/40 rounded-xl",
+                    "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground transition-all duration-300 hover:bg-sidebar-accent/60 rounded-xl h-14",
                     isCollapsed && "justify-center px-2"
                   )}
                 >
-                  <Avatar className="h-8 w-8 rounded-lg border border-white/10 shadow-sm ring-1 ring-black/5 flex-shrink-0">
-                    <AvatarImage src={profile?.avatar_url || ''} alt={profile?.username || 'User'} />
-                    <AvatarFallback className="rounded-lg bg-gradient-to-br from-primary/20 to-purple-500/20 text-primary text-xs font-bold">
-                      {profile?.username?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || "U"}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative flex-shrink-0">
+                    <Avatar className="h-9 w-9 rounded-xl border border-white/10 shadow-lg ring-1 ring-black/5">
+                      <AvatarImage src={profile?.avatar_url || ''} alt={profile?.username || 'User'} />
+                      <AvatarFallback className="rounded-xl bg-gradient-to-br from-primary/20 via-purple-500/10 to-indigo-500/20 text-primary text-xs font-black">
+                        {profile?.username?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-sidebar-background p-0.5 shadow-sm">
+                      <div className="h-full w-full rounded-full bg-emerald-500 border border-sidebar-background group-hover:animate-pulse" />
+                    </div>
+                  </div>
                   {!isCollapsed && (
                     <>
-                      <div className="grid flex-1 text-left text-sm leading-tight ml-1 overflow-hidden">
-                        <span className="truncate font-semibold text-sm">{profile?.username || user?.email?.split('@')[0] || "User"}</span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {user?.email || "Not signed in"}
+                      <div className="grid flex-1 text-left text-sm leading-tight ml-2 overflow-hidden">
+                        <span className="truncate font-bold text-sm tracking-tight">{profile?.username || user?.email?.split('@')[0] || "User"}</span>
+                        <span className="truncate text-[10px] text-muted-foreground/80 font-medium uppercase tracking-wider">
+                          Personal Workspace
                         </span>
                       </div>
-                      <MoreHorizontal className="ml-auto size-4 text-muted-foreground/50 flex-shrink-0" />
+                      <div className="ml-auto opacity-40 group-hover:opacity-100 transition-opacity">
+                        <MoreHorizontal className="size-4" />
+                      </div>
                     </>
                   )}
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent
-                className="w-[--radix-dropdown-menu-trigger-width] min-w-60 rounded-xl shadow-2xl border-white/10 bg-sidebar/90 backdrop-blur-2xl p-2 mb-1"
-                side="bottom"
-                align="end"
-                sideOffset={8}
+                className="w-[--radix-dropdown-menu-trigger-width] min-w-64 rounded-2xl shadow-2xl border-white/10 bg-sidebar/95 backdrop-blur-3xl p-2 mb-2 ring-1 ring-black/10"
+                side="top"
+                align="start"
+                sideOffset={12}
               >
                 <DropdownMenuLabel className="p-0 font-normal">
-                  <div className="flex items-center gap-3 px-2 py-2.5 text-left text-sm bg-gradient-to-br from-sidebar-accent/50 to-transparent rounded-lg mb-1 border border-white/5">
-                    <Avatar className="h-9 w-9 rounded-lg border border-white/10">
+                  <div className="flex items-center gap-3 px-3 py-3 text-left text-sm bg-gradient-to-br from-primary/5 to-transparent rounded-xl mb-1 border border-white/5">
+                    <Avatar className="h-10 w-10 rounded-xl border border-white/10 shadow-md">
                       <AvatarImage src={profile?.avatar_url || ''} alt={profile?.username || 'User'} />
-                      <AvatarFallback className="rounded-lg">
+                      <AvatarFallback className="rounded-xl font-bold bg-sidebar-accent">
                         {profile?.username?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || "U"}
                       </AvatarFallback>
                     </Avatar>
                     <div className="grid flex-1 text-left text-sm leading-tight">
-                      <span className="truncate font-bold">{profile?.username || user?.email?.split('@')[0] || "User"}</span>
-                      <span className="truncate text-xs text-muted-foreground/80">{user?.email || "Not signed in"}</span>
+                      <span className="truncate font-black text-base">{profile?.username || user?.email?.split('@')[0] || "User"}</span>
+                      <span className="truncate text-xs text-muted-foreground/70 font-medium">{user?.email || "Not signed in"}</span>
                     </div>
                   </div>
                 </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-white/5 my-1" />
-                <DropdownMenuItem className="cursor-pointer focus:bg-sidebar-accent/50" onClick={() => navigate('/settings')}>
-                  <User className="mr-2 h-4 w-4 text-muted-foreground" />
-                  Account
-                </DropdownMenuItem>
-                <DropdownMenuItem className="cursor-pointer focus:bg-sidebar-accent/50" onClick={() => navigate('/settings')}>
-                  <Settings className="mr-2 h-4 w-4 text-muted-foreground" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-white/5 my-1" />
-                <div className="flex items-center justify-between px-2 py-2 hover:bg-sidebar-accent/30 rounded-md transition-colors">
-                  <span className="text-xs text-muted-foreground font-medium">Appearance</span>
+                <DropdownMenuSeparator className="bg-white/5 my-2" />
+                <div className="grid grid-cols-2 gap-1 mb-2">
+                  <DropdownMenuItem className="cursor-pointer focus:bg-primary/10 focus:text-primary rounded-lg flex flex-col items-center justify-center py-3 gap-1 border border-transparent hover:border-primary/10 transition-all" onClick={() => navigate('/settings')}>
+                    <User className="h-4 w-4" />
+                    <span className="text-[10px] font-bold">Profile</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer focus:bg-primary/10 focus:text-primary rounded-lg flex flex-col items-center justify-center py-3 gap-1 border border-transparent hover:border-primary/10 transition-all" onClick={() => navigate('/settings')}>
+                    <Settings className="h-4 w-4" />
+                    <span className="text-[10px] font-bold">Settings</span>
+                  </DropdownMenuItem>
+                </div>
+                <DropdownMenuSeparator className="bg-white/5 my-2" />
+                <div className="flex items-center justify-between px-3 py-2.5 hover:bg-sidebar-accent/50 rounded-xl transition-all border border-transparent hover:border-white/5 mx-1">
+                  <div className="flex items-center gap-2">
+                    <Moon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-xs font-semibold">Night Mode</span>
+                  </div>
                   <ThemeToggle className="scale-90 origin-right hover:bg-transparent shadow-none border-none p-0 h-auto" />
                 </div>
-                <DropdownMenuSeparator className="bg-white/5 my-1" />
-                <DropdownMenuItem className="text-red-500/80 hover:text-red-600 hover:bg-red-500/10 focus:bg-red-500/10 focus:text-red-600 cursor-pointer transition-colors">
+                <DropdownMenuSeparator className="bg-white/5 my-2" />
+                <DropdownMenuItem className="text-red-500/90 font-bold hover:text-red-500 hover:bg-red-500/10 focus:bg-red-500/10 focus:text-red-500 rounded-xl cursor-pointer transition-all mx-1 py-2.5">
                   <LogOut className="mr-2 h-4 w-4" />
-                  Log out
+                  Sign Out
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
