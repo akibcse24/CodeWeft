@@ -48,6 +48,7 @@ export async function safeInvoke<T = unknown>(
       } else {
         console.error(`[Supabase Function Error] ${functionName}:`, error);
         if ('context' in error) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           console.error(`[Supabase Function Error Context]`, (error as any).context);
         }
       }

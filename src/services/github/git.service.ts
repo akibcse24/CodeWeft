@@ -214,7 +214,7 @@ export async function updateFile(
     message: string,
     branch = 'main',
     sha?: string // Required for updates, not for create
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 ): Promise<unknown> {
     return withRetry(async () => {
         const octokit = await getOctokit();

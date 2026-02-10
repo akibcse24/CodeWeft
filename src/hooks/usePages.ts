@@ -5,6 +5,7 @@ import { useAuth } from "./useAuth";
 import { Tables, TablesInsert, TablesUpdate, Json } from "@/integrations/supabase/types";
 import { Block } from "@/types/editor.types";
 import { db } from "@/lib/db";
+import { useSync } from "./useSync";
 
 type Page = Tables<"pages">;
 type PageInsert = TablesInsert<"pages">;
@@ -15,6 +16,9 @@ export function usePages() {
   const queryClient = useQueryClient();
   const [localPages, setLocalPages] = useState<Page[]>([]);
   const [localFavorites, setLocalFavorites] = useState<Page[]>([]);
+
+  // Use sync hook without background sync to get access to pushLocalChanges
+  const { pushLocalChanges } = useSync(false);
 
   const fetchLocal = useCallback(async () => {
     if (!user) return;
@@ -118,6 +122,7 @@ export function usePages() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["pages-cloud"] });
+      pushLocalChanges(); // Trigger immediate sync
     },
   });
 
@@ -145,27 +150,33 @@ export function usePages() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["pages-cloud"] });
+      pushLocalChanges(); // Trigger immediate sync
     },
   });
 
   const deletePage = useMutation({
     mutationFn: async (id: string) => {
-      // 1. Local (Archive)
-      await db.pages.update(id, { is_archived: true });
+      // 1. Call RPC to move to trash
+      const { error } = await supabase.rpc('move_to_trash', { p_page_id: id });
+      if (error) throw error;
+
+      // 2. Local Update
+      // Remove from pages table locally
+      await db.pages.delete(id);
+
+      // Update local state
       await fetchLocal();
 
-      // 2. Queue
-      await db.sync_queue.add({
-        table: 'pages',
-        action: 'update',
-        data: { id, is_archived: true },
-        timestamp: Date.now()
-      });
-
-      // Sync queue handles cloud push
+      // We don't add to sync_queue because the RPC handles the server-side change
+      // and we want to avoid double-deleting or conflict.
+      // However, if we want offline support, we'd need a different approach.
+      // For now, we assume online only for trash operations or let standard sync handle it if we used standard delete (but we're not).
+      // Actually, since we're using RPC, we should probably invalid query cache.
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["pages-cloud"] });
+      queryClient.invalidateQueries({ queryKey: ["trash"] }); // Invalidate trash query if it exists
+      // pushLocalChanges(); // No local changes to push for this op
     },
   });
 
@@ -189,6 +200,7 @@ export function usePages() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["pages-cloud"] });
+      pushLocalChanges(); // Trigger immediate sync
     },
   });
 
@@ -210,6 +222,7 @@ export function usePages() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["pages-cloud"] });
+      pushLocalChanges(); // Trigger immediate sync
     },
   });
 
@@ -233,6 +246,7 @@ export function usePages() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["pages-cloud"] });
+      pushLocalChanges(); // Trigger immediate sync
     },
   });
 

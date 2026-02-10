@@ -68,7 +68,7 @@ export default function Whiteboard() {
 
         const loadWhiteboard = async () => {
             try {
-                // @ts-ignore - whiteboards table might be missing in local types
+
                 const { data, error } = await supabase
                     .from('whiteboards')
                     .select('*')
@@ -87,12 +87,12 @@ export default function Whiteboard() {
                 }
 
                 if (data) {
-                    // @ts-ignore - whiteboards data types
+
                     dbRecordIdRef.current = data.id;
-                    // @ts-ignore - whiteboards data types
+
                     if (data.content && typeof data.content === 'object') {
-                        // @ts-ignore
-                        setSnapshot(data.content as TLStoreSnapshot);
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        setSnapshot(data.content as any);
                     }
                 }
             } catch (err) {
@@ -117,8 +117,8 @@ export default function Whiteboard() {
         // If we have a snapshot from DB, load it
         if (snapshot) {
             console.log("Loading snapshot from DB");
-            // @ts-ignore
-            editorInstance.store.loadSnapshot(snapshot);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (editorInstance.store as any).loadSnapshot(snapshot);
         }
 
         // Subscribe to changes and debounce save
@@ -130,13 +130,13 @@ export default function Whiteboard() {
                 timeoutId = setTimeout(async () => {
                     if (!session?.user?.id) return;
 
-                    // @ts-ignore
-                    const newSnapshot = editorInstance.store.getSnapshot();
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const newSnapshot = (editorInstance.store as any).getSnapshot();
 
                     try {
                         if (dbRecordIdRef.current) {
                             // Update existing
-                            // @ts-ignore - whiteboards table types
+
                             const { error } = await supabase
                                 .from('whiteboards')
                                 .update({
@@ -149,7 +149,7 @@ export default function Whiteboard() {
                             if (error) throw error;
                         } else {
                             // Create new
-                            // @ts-ignore - whiteboards table types
+
                             const { data, error } = await supabase
                                 .from('whiteboards')
                                 .insert({
@@ -190,7 +190,7 @@ export default function Whiteboard() {
 
         try {
             if (dbRecordIdRef.current) {
-                // @ts-ignore
+
                 await supabase.from('whiteboards').delete().eq('id', dbRecordIdRef.current);
                 dbRecordIdRef.current = null;
             }
@@ -213,7 +213,7 @@ export default function Whiteboard() {
     }
 
     return (
-        <div className="flex flex-col h-full min-h-[calc(100vh-4rem)] animate-fade-in relative group isolate">
+        <div className="flex flex-col h-[85vh] w-full animate-fade-in relative group isolate border rounded-lg overflow-hidden shadow-sm">
             <div className="flex items-center justify-between p-4 border-b bg-background/50 backdrop-blur-md sticky top-0 z-50">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>

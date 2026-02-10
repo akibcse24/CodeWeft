@@ -100,7 +100,7 @@ export class ResearchAgent extends BaseAgent {
 
     private async handlePapers(message: string, context?: Record<string, any>): Promise<string> {
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             const { data, error } = await (supabase as any)
                 .from("papers")
                 .select("*")
@@ -210,7 +210,7 @@ export class ProductivityAgent extends BaseAgent {
 
     private async handleTasks(message: string, context?: Record<string, unknown>): Promise<string> {
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             const { data, error } = await (supabase as any)
                 .from("tasks")
                 .select("*")

@@ -30,7 +30,7 @@ const CORE_TABLES = [
 
 type TableName = keyof Database['public']['Tables'];
 
-export function useSync() {
+export function useSync(enableBackgroundSync = true) {
     const { user } = useAuth();
     const isSyncingRef = useRef(false);
 
@@ -163,7 +163,7 @@ export function useSync() {
     }, [user, pushLocalChanges, pullRemoteChanges]);
 
     useEffect(() => {
-        if (user) {
+        if (user && enableBackgroundSync) {
             syncAll();
 
             // Set up interval for background sync
@@ -197,7 +197,7 @@ export function useSync() {
                 supabase.removeChannel(channel);
             };
         }
-    }, [user, syncAll, pullRemoteChanges]);
+    }, [user, syncAll, pullRemoteChanges, enableBackgroundSync]);
 
     return useMemo(() => ({ syncAll, pushLocalChanges, pullRemoteChanges }), [syncAll, pushLocalChanges, pullRemoteChanges]);
 }

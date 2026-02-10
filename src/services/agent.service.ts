@@ -527,7 +527,6 @@ export const agentTools: ToolDefinition[] = [
     }
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const handleToolCall = async (toolName: string, args: Record<string, any>, userId: string) => {
     switch (toolName) {
         case "list_notes": {
@@ -627,7 +626,7 @@ export const handleToolCall = async (toolName: string, args: Record<string, any>
 
             const { data, error } = await supabase
                 .from("tasks")
-                .update(updateData)
+                .update(updateData as any)
                 .eq("id", args.task_id as string)
                 .eq("user_id", userId)
                 .select()
@@ -638,7 +637,7 @@ export const handleToolCall = async (toolName: string, args: Record<string, any>
         case "complete_task": {
             const { data, error } = await supabase
                 .from("tasks")
-                .update({ status: "completed", completed_at: new Date().toISOString() })
+                .update({ status: "completed", completed_at: new Date().toISOString() } as any)
                 .eq("id", args.task_id as string)
                 .eq("user_id", userId)
                 .select()

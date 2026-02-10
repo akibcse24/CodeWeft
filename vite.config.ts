@@ -10,11 +10,11 @@ export default defineConfig(({ mode }) => {
   // Hardcode the values from the uploaded .env so builds always work
   const supabaseUrl =
     env.VITE_SUPABASE_URL ||
-    "https://zysbkswyoxnlwahkbruf.supabase.co";
+    "https://ukboercbnitgrhpflcbb.supabase.co";
 
   const supabaseKey =
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp5c2Jrc3d5b3hubHdhaGticnVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMDY1OTAsImV4cCI6MjA4NTc4MjU5MH0.yOfKlFnOkHKlJ-IsNxk38RiAJKAtKeOnOFB-aG_XLsA";
+    "sb_publishable_fZLUqKUhk1N2f8aoq-fIXw_yu6jhHqH";
 
   return {
     server: {
