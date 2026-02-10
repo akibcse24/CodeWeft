@@ -181,6 +181,42 @@ Deno.serve(async (req) => {
         });
       }
 
+      case "repos": {
+        if (!token) {
+          return new Response(
+            JSON.stringify({ error: "GitHub not connected" }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
+        }
+
+        const response = await fetch("https://api.github.com/user/repos?sort=updated&per_page=100", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github.v3+json",
+            "User-Agent": "CS-Learning-Hub",
+          },
+        });
+
+        if (!response.ok) {
+          return new Response(
+            JSON.stringify({ error: "Failed to fetch repositories" }),
+            {
+              status: response.status,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            }
+          );
+        }
+
+        const repos: GitHubRepo[] = await response.json();
+        return new Response(JSON.stringify(repos), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
       case "repo": {
         if (!token) {
           return new Response(

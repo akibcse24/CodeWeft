@@ -47,6 +47,9 @@ export async function safeInvoke<T = unknown>(
         console.debug(`[Supabase Function Error] ${functionName} (suppressed):`, error);
       } else {
         console.error(`[Supabase Function Error] ${functionName}:`, error);
+        if ('context' in error) {
+          console.error(`[Supabase Function Error Context]`, (error as any).context);
+        }
       }
 
       if (error instanceof Error) {
