@@ -2453,7 +2453,7 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
   };
 
   const traverseAndInsert = (nodes: Block[], targetId: string, blockToInsert: Block, position: 'top' | 'bottom' | 'inside'): Block[] => {
-    let newNodes: Block[] = [];
+    const newNodes: Block[] = [];
     for (const node of nodes) {
       if (node.id === targetId) {
         if (position === 'top') {

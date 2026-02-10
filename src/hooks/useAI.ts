@@ -109,7 +109,8 @@ export function useAI() {
             // If it's a generator, we'd need to collect it. Checking ai.service.ts would be good but I'll assume it returns a string for now based on previous usage.
             const text = typeof result === 'string' ? result : await (async () => {
                 let full = "";
-                for await (const chunk of result as any) {
+                const stream = result as AsyncIterable<{ choices: Array<{ delta: { content?: string } }> }>;
+                for await (const chunk of stream) {
                     if (chunk.choices?.[0]?.delta?.content) {
                         full += chunk.choices[0].delta.content;
                     }

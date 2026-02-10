@@ -77,7 +77,7 @@ export function useGrowth() {
             await db.sync_queue.add({
                 table: 'growth_roadmaps',
                 action: 'insert',
-                data: newRoadmap as any,
+                data: newRoadmap as Record<string, unknown>,
                 timestamp: Date.now()
             });
 
@@ -112,7 +112,7 @@ export function useGrowth() {
             await db.sync_queue.add({
                 table: 'growth_roadmaps',
                 action: 'update',
-                data: current as any,
+                data: current as Record<string, unknown>,
                 timestamp: Date.now()
             });
 
@@ -181,7 +181,7 @@ export function useGrowth() {
             await db.sync_queue.add({
                 table: 'growth_skills',
                 action: 'insert',
-                data: newSkill as any,
+                data: newSkill as Record<string, unknown>,
                 timestamp: Date.now()
             });
 
@@ -209,7 +209,7 @@ export function useGrowth() {
             await db.sync_queue.add({
                 table: 'growth_skills',
                 action: 'update',
-                data: current as any,
+                data: current as Record<string, unknown>,
                 timestamp: Date.now()
             });
 
@@ -278,7 +278,7 @@ export function useGrowth() {
             await db.sync_queue.add({
                 table: 'growth_retros',
                 action: 'insert',
-                data: newRetro as any,
+                data: newRetro as Record<string, unknown>,
                 timestamp: Date.now()
             });
 

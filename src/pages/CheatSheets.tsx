@@ -35,7 +35,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useAI } from "@/hooks/useAI";
-import { useCheatSheets, CheatSheet } from "@/hooks/useCheatSheets";
+import { useCheatSheets, CheatSheet, CheatSheetItem } from "@/hooks/useCheatSheets";
 import {
     Dialog,
     DialogContent,
@@ -140,7 +140,7 @@ export default function CheatSheets() {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [dialogTab, setDialogTab] = useState<"ai" | "manual">("manual");
     const [topic, setTopic] = useState("");
-    const [previewSheet, setPreviewSheet] = useState<any>(null);
+    const [previewSheet, setPreviewSheet] = useState<{ title: string; categories: string[]; items: CheatSheetItem[] } | null>(null);
 
     // Manual Create form
     const [manualTitle, setManualTitle] = useState("");
@@ -185,7 +185,7 @@ export default function CheatSheets() {
         return allSheets.find(s => s.id === activeSheetId) || allSheets[0];
     }, [allSheets, activeSheetId]);
 
-    const isCustom = (activeSheet as any).isCustom === true;
+    const isCustom = (activeSheet as unknown as CheatSheet & { isCustom?: boolean }).isCustom === true;
 
     // ─── Clipboard ───
     const copyToClipboard = (cmd: string) => {
@@ -255,7 +255,7 @@ export default function CheatSheets() {
                 items: [...sheet.items],
                 color: sheet.color,
             });
-            if (result?.id) setActiveSheetId(result.id);
+            if (result && 'id' in result) setActiveSheetId(result.id as string);
         } catch {
             // Error handled by hook
         }
@@ -339,8 +339,8 @@ export default function CheatSheets() {
         }
         if (!isCustom) return;
 
-        let newItems = [...activeSheet.items];
-        let newCategories = [...activeSheet.categories];
+        const newItems = [...activeSheet.items];
+        const newCategories = [...activeSheet.categories];
 
         if (editingItemIndex !== null) {
             newItems[editingItemIndex] = { ...itemForm };
@@ -406,7 +406,7 @@ export default function CheatSheets() {
             title: activeSheet.title,
             categories: activeSheet.categories,
             items: activeSheet.items,
-            color: (activeSheet as any).color || "text-primary",
+            color: (activeSheet as unknown as CheatSheet).color || "text-primary",
         };
         const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -435,8 +435,9 @@ export default function CheatSheets() {
                     items: data.items,
                     color: data.color || "text-primary",
                 });
-            } catch (err: any) {
-                toast({ title: "Import Failed", description: err.message || "Invalid JSON file.", variant: "destructive" });
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : "Invalid JSON file.";
+                toast({ title: "Import Failed", description: errorMessage, variant: "destructive" });
             }
         };
         reader.readAsText(file);
@@ -512,9 +513,9 @@ export default function CheatSheets() {
                     </div>
                     <div className="grid gap-2">
                         {allSheets.map((sheet) => {
-                            const Icon = (sheet as any).icon || Book;
+                            const Icon = (sheet as unknown as { icon?: unknown }).icon as React.ElementType || Book;
                             const isActive = activeSheetId === sheet.id;
-                            const sheetIsCustom = (sheet as any).isCustom;
+                            const sheetIsCustom = (sheet as unknown as { isCustom?: boolean }).isCustom;
 
                             return (
                                 <motion.div
@@ -684,7 +685,7 @@ export default function CheatSheets() {
                                                     {previewSheet.title}
                                                 </h4>
                                                 <div className="max-h-[250px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                                                    {previewSheet.items.map((item: any, i: number) => (
+                                                    {previewSheet.items.map((item, i: number) => (
                                                         <div key={i} className="text-xs p-2 rounded-lg bg-background/50 border border-border/10">
                                                             <code className="text-primary font-mono">{item.cmd}</code>
                                                             <p className="text-muted-foreground mt-1">{item.desc}</p>
@@ -765,7 +766,7 @@ export default function CheatSheets() {
                                                 onClick={() => handleColorChange(c.value)}
                                                 className={cn(
                                                     "w-8 h-8 rounded-lg border-2 transition-all flex items-center justify-center hover:scale-110",
-                                                    (activeSheet as any).color === c.value ? "border-foreground shadow-lg" : "border-transparent"
+                                                    (activeSheet as unknown as CheatSheet).color === c.value ? "border-foreground shadow-lg" : "border-transparent"
                                                 )}
                                                 title={c.name}
                                             >
@@ -946,7 +947,7 @@ export default function CheatSheets() {
                                         transition={{ duration: 0.3, delay: i * 0.03 }}
                                         draggable={isCustom}
                                         onDragStart={() => handleDragStart(realIndex)}
-                                        onDragOver={(e: any) => handleDragOver(e, realIndex)}
+                                        onDragOver={(e) => handleDragOver(e, realIndex)}
                                         onDrop={() => handleDrop(realIndex)}
                                         onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
                                     >

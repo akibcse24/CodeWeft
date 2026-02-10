@@ -27,7 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGrowth, RoadmapItem, SkillItem } from "@/hooks/useGrowth";
-import { useGitHub } from "@/hooks/useGitHub";
+import { useGitHub, GitHubRepo } from "@/hooks/useGitHub";
 import { cn } from "@/lib/utils";
 
 export default function GrowthHub() {
@@ -454,7 +454,7 @@ export default function GrowthHub() {
                                             <Star className="h-6 w-6 text-emerald-400" />
                                         </div>
                                         <div>
-                                            <h4 className="text-2xl font-black">{repositories?.reduce((acc: number, r: any) => acc + (r.stargazers_count || 0), 0) || 0}</h4>
+                                            <h4 className="text-2xl font-black">{repositories?.reduce((acc: number, r: GitHubRepo) => acc + (r.stargazers_count || 0), 0) || 0}</h4>
                                             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Total Stars Received</p>
                                         </div>
                                     </Card>
@@ -479,7 +479,7 @@ export default function GrowthHub() {
                                     <CardContent className="p-8 pt-0">
                                         {repositories && repositories.length > 0 ? (
                                             <div className="grid gap-4">
-                                                {repositories.slice(0, 5).map((repo: any) => (
+                                                {repositories.slice(0, 5).map((repo: GitHubRepo) => (
                                                     <div key={repo.name} className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border border-border/40 group hover:bg-muted/30 transition-all">
                                                         <div className="flex items-center gap-4">
                                                             <div className="p-2 rounded-xl bg-background/50 border border-border/20">

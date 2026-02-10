@@ -66,7 +66,7 @@ export function useSync() {
                         ];
 
                         // Create a new clean object with only valid columns
-                        const cleanData: any = {};
+                        const cleanData: Record<string, unknown> = {};
                         validColumns.forEach(col => {
                             if (col in dataToPush) {
                                 cleanData[col] = dataToPush[col];

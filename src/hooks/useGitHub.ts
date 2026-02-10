@@ -51,6 +51,14 @@ interface GitHubEvent {
   };
 }
 
+export interface GitHubRepo {
+  name: string;
+  stargazers_count: number;
+  forks_count: number;
+  html_url: string;
+  language: string | null;
+}
+
 export function useGitHub() {
   const { user, session } = useAuth();
   const queryClient = useQueryClient();
@@ -246,7 +254,7 @@ export function useGitHub() {
     refetch: refetchRepositories,
   } = useQuery({
     queryKey: ["github-repositories", user?.id],
-    queryFn: async (): Promise<any[] | null> => {
+    queryFn: async (): Promise<GitHubRepo[] | null> => {
       const { data, error } = await safeInvoke("github-api?action=repos", {
         method: "POST",
         body: {},
@@ -256,7 +264,7 @@ export function useGitHub() {
         logger.error("Repositories error:", error);
         return null;
       }
-      return data as any[];
+      return data as GitHubRepo[];
     },
     enabled: !!settings?.github_token && !!settings?.github_username,
   });
