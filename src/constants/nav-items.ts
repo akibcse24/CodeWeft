@@ -33,7 +33,8 @@ import {
     FolderKanban as GraphIcon,
     BarChart3,
     Shield,
-    Settings
+    Settings,
+    Trash2
 } from "lucide-react";
 
 export const mainNavItems = [
@@ -92,4 +93,5 @@ export const toolsNavItems = [
     { title: "Analytics", url: "/analytics", icon: BarChart3 },
     { title: "Secrets Vault", url: "/secrets", icon: Shield },
     { title: "Settings", url: "/settings", icon: Settings },
+    { title: "Trash", url: "/trash", icon: Trash2 },
 ];

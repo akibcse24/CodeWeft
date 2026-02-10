@@ -24,6 +24,7 @@ export interface EditorTab {
     language: string;
     isDirty: boolean; // Has unsaved changes
     isNew: boolean; // New file not yet saved
+    sha?: string; // File SHA for updates
 }
 
 interface TabManagerProps {

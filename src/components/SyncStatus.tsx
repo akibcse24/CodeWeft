@@ -1,10 +1,14 @@
+import React, { useState, useEffect } from "react";
 import { useIsMutating, useIsFetching } from "@tanstack/react-query";
 import { WifiOff, RefreshCw, CheckCircle2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-export function SyncStatus() {
+export const SyncStatus = React.memo(function SyncStatus() {
     const isMutating = useIsMutating();
     const isFetching = useIsFetching();
     const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -52,4 +56,4 @@ export function SyncStatus() {
             <TooltipContent>{isSyncing ? "Syncing..." : "All changes saved"}</TooltipContent>
         </Tooltip>
     );
-}
+});

@@ -1,5 +1,5 @@
 // AI Service - Uses secure backend edge function
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, safeInvoke } from "@/integrations/supabase/client";
 
 export interface AIConfig {
     apiKey: string;
@@ -35,21 +35,33 @@ export const isAIConfigured = () => {
 
 // Stream chat completion via edge function
 export const streamCompletion = async (messages: Array<{ role: string; content: string }>) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const projectUrl = import.meta.env.VITE_SUPABASE_URL;
+
+    if (!projectUrl) throw new Error("VITE_SUPABASE_URL is not defined");
+
     const response = await fetch(
-        `https://zysbkswyoxnlwahkbruf.supabase.co/functions/v1/ai-chat`,
+        `${projectUrl}/functions/v1/ai-chat`,
         {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp5c2Jrc3d5b3hubHdhaGticnVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMDY1OTAsImV4cCI6MjA4NTc4MjU5MH0.yOfKlFnOkHKlJ-IsNxk38RiAJKAtKeOnOFB-aG_XLsA"}`,
+                Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({ messages }),
         }
     );
 
     if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: "AI service error" }));
-        throw new Error(error.error || "Failed to get AI response");
+        let errorMessage = "AI service error";
+        try {
+            const error = await response.json();
+            errorMessage = error.error || errorMessage;
+        } catch {
+            // Ignore JSON parse error
+        }
+        throw new Error(errorMessage);
     }
 
     return {
@@ -88,13 +100,19 @@ export const streamCompletion = async (messages: Array<{ role: string; content: 
 };
 
 export const callAI = async (request: AIRequest): Promise<{ result: string }> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
+    const projectUrl = import.meta.env.VITE_SUPABASE_URL;
+
+    if (!projectUrl) throw new Error("VITE_SUPABASE_URL is not defined");
+
     const response = await fetch(
-        `https://zysbkswyoxnlwahkbruf.supabase.co/functions/v1/ai-chat`,
+        `${projectUrl}/functions/v1/ai-chat`,
         {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp5c2Jrc3d5b3hubHdhaGticnVmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMDY1OTAsImV4cCI6MjA4NTc4MjU5MH0.yOfKlFnOkHKlJ-IsNxk38RiAJKAtKeOnOFB-aG_XLsA"}`,
+                Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
                 action: request.action,
@@ -105,8 +123,14 @@ export const callAI = async (request: AIRequest): Promise<{ result: string }> =>
     );
 
     if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: "AI service error" }));
-        throw new Error(error.error || "Failed to get AI response");
+        let errorMessage = "AI service error";
+        try {
+            const error = await response.json();
+            errorMessage = error.error || errorMessage;
+        } catch {
+            // Ignore JSON parse error
+        }
+        throw new Error(errorMessage);
     }
 
     // Parse streaming response
@@ -146,16 +170,23 @@ export const callAI = async (request: AIRequest): Promise<{ result: string }> =>
 
 // Embeddings - will need separate implementation or disable for now
 export const getEmbedding = async (text: string): Promise<number[]> => {
-    try {
-        const { data, error } = await supabase.functions.invoke("get-embeddings", {
-            body: { text }
-        });
+    if (!text) return [];
 
-        if (error) throw error;
-        return data.embedding;
-    } catch (error) {
-        console.error("Embedding failure:", error);
-        // Fallback or rethrow? For now, rethrow to handle in UI if needed
-        throw error;
+    const { data, error } = await safeInvoke<{ embedding: number[] }>("get-embeddings", {
+        body: { text },
+        showErrorToast: false
+    });
+
+    if (error) {
+        // We already have a toast from safeInvoke, but we can be more specific here if needed
+        console.warn("[AI Service] Falling back to zero-vector due to embedding failure. Check Supabase function logs.");
+        return new Array(768).fill(0);
     }
+
+    if (!data?.embedding) {
+        console.error("Embedding response missing embedding data:", data);
+        return new Array(768).fill(0);
+    }
+
+    return data.embedding;
 };

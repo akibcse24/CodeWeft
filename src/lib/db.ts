@@ -19,6 +19,9 @@ export class CodeweftStore extends Dexie {
     github_settings!: Table<Tables<"github_settings">>;
     profiles!: Table<Tables<"profiles">>;
     deleted_pages!: Table<Tables<"deleted_pages">>;
+    growth_roadmaps!: Table<Tables<"growth_roadmaps">>;
+    growth_skills!: Table<Tables<"growth_skills">>;
+    growth_retros!: Table<Tables<"growth_retros">>;
     sync_queue!: Table<{
         id?: number;
         table: string;
@@ -29,7 +32,7 @@ export class CodeweftStore extends Dexie {
 
     constructor() {
         super('CodeweftDB');
-        this.version(2).stores({
+        this.version(4).stores({
             tasks: 'id, user_id, status, priority, updated_at',
             pages: 'id, user_id, parent_id, is_favorite, updated_at',
             ml_notes: 'id, user_id, category, is_favorite, updated_at',
@@ -47,6 +50,9 @@ export class CodeweftStore extends Dexie {
             github_settings: 'id, user_id, updated_at',
             profiles: 'id, user_id, username, updated_at',
             deleted_pages: 'id, user_id, deleted_at, permanently_delete_at',
+            growth_roadmaps: 'id, user_id, status, updated_at',
+            growth_skills: 'id, user_id, category, updated_at',
+            growth_retros: 'id, user_id, date, updated_at',
             sync_queue: '++id, table, action, timestamp'
         });
     }

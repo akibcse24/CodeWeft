@@ -10,8 +10,8 @@
  */
 
 import { useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
-import { useRepository, useBranches, useCreateBranch, useDeleteBranch, useMergeBranches } from '@/hooks/github/useGitOperations';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { useRepository, useBranches, useCreateBranch, useDeleteBranch, useMergeBranches, useRepositories } from '@/hooks/github/useGitOperations';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,13 +42,14 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { GitBranch, Plus, Trash2, GitMerge, CheckCircle, RefreshCw, Code2 } from 'lucide-react';
+import { GitBranch, Plus, Trash2, GitMerge, CheckCircle, RefreshCw, Code2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import type { GitHubBranch } from '@/types/github';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 
 export function BranchManager() {
     const { owner, repo } = useParams<{ owner: string; repo: string }>();
+    const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const currentBranch = searchParams.get('branch') || 'main';
 
@@ -143,10 +144,64 @@ export function BranchManager() {
         setDeleteDialogOpen(true);
     };
 
+    // Repository selection state for when no repo is specified
+    const { data: allRepositories, isLoading: isLoadingRepos } = useRepositories();
+    const [repoSearchQuery, setRepoSearchQuery] = useState('');
+    const filteredRepos = allRepositories?.filter(r =>
+        r.name.toLowerCase().includes(repoSearchQuery.toLowerCase())
+    );
+
     if (!owner || !repo) {
         return (
-            <div className="container mx-auto py-6">
-                <p className="text-destructive">Invalid repository parameters</p>
+            <div className="container mx-auto py-6 space-y-6">
+                <div className="flex flex-col gap-2">
+                    <h1 className="text-3xl font-bold">Branch Manager</h1>
+                    <p className="text-muted-foreground">Select a repository to manage its branches</p>
+                </div>
+
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder="Search repositories..."
+                        value={repoSearchQuery}
+                        onChange={(e) => setRepoSearchQuery(e.target.value)}
+                        className="pl-10"
+                    />
+                </div>
+
+                {isLoadingRepos ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <Card key={i}>
+                                <CardHeader>
+                                    <Skeleton className="h-6 w-3/4" />
+                                    <Skeleton className="h-4 w-full" />
+                                </CardHeader>
+                            </Card>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredRepos?.map((r) => (
+                            <Card
+                                key={r.id}
+                                className="cursor-pointer hover:shadow-md transition-all hover:border-primary"
+                                onClick={() => navigate(`/github/branches/${r.owner.login}/${r.name}`)}
+                            >
+                                <CardHeader>
+                                    <CardTitle className="text-lg flex items-center gap-2">
+                                        <GitBranch className="h-4 w-4" />
+                                        {r.name}
+                                        {r.private && <Badge variant="secondary" className="text-xs">Private</Badge>}
+                                    </CardTitle>
+                                    <CardDescription className="line-clamp-2">
+                                        {r.description || 'No description'}
+                                    </CardDescription>
+                                </CardHeader>
+                            </Card>
+                        ))}
+                    </div>
+                )}
             </div>
         );
     }
@@ -386,7 +441,7 @@ function BranchCard({ branch, isDefault, isCurrent, onSwitch, onDelete, owner, r
                             {isDefault && <Badge variant="secondary">Default</Badge>}
                         </CardTitle>
                         <CardDescription className="mt-2">
-                            Last commit: {branch.commit.sha.substring(0, 7)} • {branch.commit.commit.message}
+                            Last commit: {branch.commit?.sha?.substring(0, 7) || 'unknown'} • {branch.commit?.commit?.message || 'No message'}
                         </CardDescription>
                     </div>
                 </div>

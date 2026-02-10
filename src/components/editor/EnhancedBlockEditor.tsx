@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
     DndContext,
-    closestCenter,
+    closestCorners,
     KeyboardSensor,
     PointerSensor,
     useSensor,
@@ -266,7 +266,7 @@ export function BlockEditor({ blocks: initialBlocks, onChange, readOnly = false 
         <div ref={editorRef} className="relative">
             <DndContext
                 sensors={sensors}
-                collisionDetection={closestCenter}
+                collisionDetection={closestCorners}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
             >

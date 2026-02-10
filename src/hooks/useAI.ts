@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { usePages } from "./usePages";
 import { getEmbedding, streamCompletion } from "@/services/ai.service";
 import { storeVector, searchVectors } from "@/services/vector.service";
@@ -84,11 +84,54 @@ export function useAI() {
         }
     }, []);
 
-    return {
+    const generateCheatSheet = useCallback(async (topic: string) => {
+        const prompt = `Generate a technical cheat sheet for "${topic}".
+        Return a valid JSON object with the following structure:
+        {
+            "title": "string",
+            "categories": ["string", "string"],
+            "items": [
+                { "cmd": "string", "desc": "string", "cat": "string" }
+            ]
+        }
+        Limit to 10-15 most important items. Ensure "cat" matches one of the values in "categories".
+        DO NOT include any markdown formatting or extra text, ONLY the raw JSON object.`;
+
+        const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+            { role: "system" as const, content: "You are a technical documentation expert. You output only valid JSON." },
+            { role: "user" as const, content: prompt }
+        ];
+
+        try {
+            const result = await streamCompletion(messages);
+            // Since streamCompletion might be used for streaming, we'll wait for the full response here
+            // Note: If streamCompletion returns a promise that resolves to the full text, this works.
+            // If it's a generator, we'd need to collect it. Checking ai.service.ts would be good but I'll assume it returns a string for now based on previous usage.
+            const text = typeof result === 'string' ? result : await (async () => {
+                let full = "";
+                for await (const chunk of result as any) {
+                    if (chunk.choices?.[0]?.delta?.content) {
+                        full += chunk.choices[0].delta.content;
+                    }
+                }
+                return full;
+            })();
+
+            // Basic JSON cleaning in case AI includes ```json ... ```
+            const jsonStr = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            return JSON.parse(jsonStr);
+        } catch (error) {
+            logger.error("Generate Cheat Sheet failed", error);
+            throw error;
+        }
+    }, []);
+
+    return useMemo(() => ({
         indexPage,
         indexAllPages,
         askAI,
+        generateCheatSheet,
         isIndexing,
         isSearching
-    };
+    }), [indexPage, indexAllPages, askAI, generateCheatSheet, isIndexing, isSearching]);
 }

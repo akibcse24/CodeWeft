@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Mic, Square, Loader2, Brain, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, safeInvoke } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 interface VoiceCaptureProps {
@@ -54,7 +54,7 @@ export function VoiceCapture({ onTranscription }: VoiceCaptureProps) {
             const formData = new FormData();
             formData.append("file", blob, "audio.webm");
 
-            const { data, error } = await supabase.functions.invoke("voice-transcribe", {
+            const { data, error } = await safeInvoke("voice-transcribe", {
                 body: formData,
             });
 

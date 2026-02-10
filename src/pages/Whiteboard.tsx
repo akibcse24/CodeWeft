@@ -18,6 +18,7 @@ import { useNavigate } from "react-router-dom";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const TEMPLATES = [
     {
@@ -52,6 +53,22 @@ export default function Whiteboard() {
     const copyTemplate = (json: string) => {
         navigator.clipboard.writeText(json);
         toast({ title: "Template Copied", description: "Press Ctrl+V on the whiteboard to paste." });
+    };
+
+    const handleReset = () => {
+        try {
+            // Clear Tldraw persistence keys
+            localStorage.removeItem('tldraw_my-personal-whiteboard');
+            localStorage.removeItem('my-personal-whiteboard');
+            // Also try clearing any v2 keys just in case
+            localStorage.removeItem('tldraw_my-personal-whiteboard_v2');
+
+            // Force reload to clear in-memory state
+            window.location.reload();
+        } catch (e) {
+            console.error("Failed to reset whiteboard storage", e);
+            window.location.reload();
+        }
     };
 
     return (
@@ -111,10 +128,25 @@ export default function Whiteboard() {
             <div className="flex-1 relative overflow-hidden">
                 {/* Tldraw wrapper to ensure it fits the container */}
                 <div className="absolute inset-0">
-                    <Tldraw
-                        inferDarkMode={true}
-                        persistenceKey="my-personal-whiteboard" // Persist locally automatically
-                    />
+                    <ErrorBoundary
+                        onReset={handleReset}
+                        fallback={
+                            <div className="flex flex-col items-center justify-center h-full space-y-4 p-8 text-center">
+                                <h2 className="text-xl font-bold">Whiteboard crashed</h2>
+                                <p className="text-muted-foreground max-w-md">
+                                    The whiteboard encountered an error. This usually happens due to corrupted local data.
+                                </p>
+                                <Button onClick={handleReset} variant="destructive">
+                                    Reset Whiteboard Data
+                                </Button>
+                            </div>
+                        }
+                    >
+                        <Tldraw
+                            inferDarkMode={true}
+                            persistenceKey="my-personal-whiteboard" // Persist locally automatically
+                        />
+                    </ErrorBoundary>
                 </div>
             </div>
         </div>

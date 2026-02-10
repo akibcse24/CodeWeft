@@ -1,59 +1,75 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-requested-with",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
 };
 
 serve(async (req) => {
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders });
+        return new Response('ok', { headers: corsHeaders, status: 200 });
     }
 
     try {
-        const { text } = await req.json();
+        const body = await req.json().catch(() => null);
 
-        if (!text) {
+        if (!body || !body.text) {
             return new Response(
                 JSON.stringify({ error: 'Text input is required' }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
             );
         }
 
-        // We use the built-in OpenAI service if available via environment variables
-        // or just proxy to OpenAI if the user provides a key.
-        // For this implementation, we assume the user has OPENAI_API_KEY in their Supabase Secrets.
-        const apiKey = Deno.env.get('OPENAI_API_KEY');
+        const { text } = body;
+        const apiKey = Deno.env.get('GOOGLE_API_KEY');
 
         if (!apiKey) {
-            console.error('OPENAI_API_KEY not found in environment');
+            console.error('GOOGLE_API_KEY not found in environment');
             return new Response(
-                JSON.stringify({ error: 'OpenAI API key not configured in Edge Function secrets' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+                JSON.stringify({ error: 'Google API key not configured. Please add GOOGLE_API_KEY to Supabase Edge Function Secrets.' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 503 }
             );
         }
 
-        const response = await fetch('https://api.openai.com/v1/embeddings', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                input: text,
-                model: 'text-embedding-3-small',
-            }),
-        });
+        // Use Google Gemini text-embedding-004 model
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: 'models/text-embedding-004',
+                    content: {
+                        parts: [{ text }]
+                    },
+                }),
+            }
+        );
 
-        const data = await response.json();
-
-        if (data.error) {
-            throw new Error(data.error.message || 'OpenAI API error');
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Google Embedding API error:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorData.error,
+            });
+            throw new Error(
+                errorData.error?.message || `Google API returned ${response.status}: ${response.statusText}`
+            );
         }
 
-        const embedding = data.data[0].embedding;
+        const data = await response.json();
+        const embedding = data?.embedding?.values;
+
+        if (!embedding || !Array.isArray(embedding)) {
+            console.error('Invalid response format from Google:', JSON.stringify(data).slice(0, 500));
+            throw new Error('Failed to retrieve embedding from Google response');
+        }
 
         return new Response(
             JSON.stringify({ embedding }),
@@ -61,10 +77,13 @@ serve(async (req) => {
         );
 
     } catch (error) {
-        console.error('Error in get-embeddings:', error);
+        console.error('Error in get-embeddings:', error.message);
         return new Response(
             JSON.stringify({ error: error.message }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+            {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                status: error.message.includes('API key') ? 503 : 500
+            }
         );
     }
 });

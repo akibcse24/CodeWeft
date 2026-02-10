@@ -189,6 +189,15 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
                                                         </div>
                                                     )}
                                                 </div>
+                                                {command.shortcut && (
+                                                    <div className="flex items-center gap-1">
+                                                        {command.shortcut.split('+').map((key, i) => (
+                                                            <kbd key={i} className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono border border-border/50 text-muted-foreground/60 min-w-fit pointer-events-none select-none">
+                                                                {key}
+                                                            </kbd>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </button>
                                         );
                                     })}

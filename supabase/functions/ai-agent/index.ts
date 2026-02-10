@@ -1,9 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "../_shared/cors.ts";
 
 // Tool definitions for the agent
 const agentTools = [
@@ -142,7 +139,7 @@ const agentTools = [
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
@@ -153,7 +150,7 @@ serve(async (req) => {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
-    const systemPrompt = mode === "agent" 
+    const systemPrompt = mode === "agent"
       ? `You are an intelligent AI agent for CodeWeft, a CS learning hub. You can:
 - Navigate users to different pages (notes, tasks, dashboard, courses, dsa, habits, etc.)
 - Create and manage tasks with priorities and due dates
@@ -196,14 +193,14 @@ Current capabilities: navigation, task management, note management, habit tracki
     if (!response.ok) {
       const errorText = await response.text();
       console.error("Groq API error:", response.status, errorText);
-      
+
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
           status: 429,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      
+
       return new Response(JSON.stringify({ error: "AI service error" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -1,24 +1,37 @@
 import { db } from "@/lib/db";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
-import { useEffect, useCallback, useRef } from "react";
-import { useToast } from "./use-toast";
+import { useEffect, useCallback, useRef, useMemo } from "react";
+import { toast } from "./use-toast";
 import { Database } from "@/integrations/supabase/types";
-import { CodeweftStore } from "@/lib/db";
 
+// Core tables to sync
 const CORE_TABLES = [
-    'tasks', 'pages', 'ml_notes', 'dsa_problems',
-    'flashcard_decks', 'flashcards', 'courses',
-    'habits', 'habit_completions', 'habit_logs',
-    'papers', 'projects', 'resources', 'secrets_vault',
-    'github_settings', 'profiles'
+    'tasks',
+    'pages',
+    'courses',
+    'habits',
+    'projects',
+    'ml_notes',
+    'dsa_problems',
+    'flashcard_decks',
+    'flashcards',
+    'habit_completions',
+    'habit_logs',
+    'papers',
+    'resources',
+    'secrets_vault',
+    'github_settings',
+    'profiles',
+    'growth_roadmaps',
+    'growth_skills',
+    'growth_retros'
 ] as const;
 
 type TableName = keyof Database['public']['Tables'];
 
 export function useSync() {
     const { user } = useAuth();
-    const { toast } = useToast();
     const isSyncingRef = useRef(false);
 
     const pushLocalChanges = useCallback(async () => {
@@ -34,14 +47,41 @@ export function useSync() {
             try {
                 let error;
                 if (item.action === 'insert' || item.action === 'update') {
-                    if (user) item.data.user_id = user.id;
+                    // Create a shallow copy to modify and sanitize
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    let dataToPush: any = { ...item.data };
+
+                    if (user) dataToPush.user_id = user.id;
 
                     // Add/Update updated_at for conflict resolution
-                    item.data.updated_at = new Date().toISOString();
+                    dataToPush.updated_at = new Date().toISOString();
+
+                    // Remove server-generated columns that shouldn't be synced from client
+                    // Strict whitelist for pages table to prevent "cannot extract elements from an object" error
+                    if (item.table === 'pages') {
+                        const validColumns = [
+                            'id', 'user_id', 'title', 'content', 'created_at', 'updated_at',
+                            'parent_id', 'icon', 'cover_url', 'is_favorite', 'is_archived',
+                            'is_public', 'tags'
+                        ];
+
+                        // Create a new clean object with only valid columns
+                        const cleanData: any = {};
+                        validColumns.forEach(col => {
+                            if (col in dataToPush) {
+                                cleanData[col] = dataToPush[col];
+                            }
+                        });
+                        dataToPush = cleanData;
+                    } else {
+                        // For other tables, just remove known bad columns
+                        delete dataToPush.search_vector;
+                        delete dataToPush.search_content;
+                    }
 
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     const { error: reqError } = await (supabase.from(item.table as TableName) as any)
-                        .upsert(item.data as Database['public']['Tables'][TableName]['Insert']);
+                        .upsert(dataToPush as Database['public']['Tables'][TableName]['Insert']);
                     error = reqError;
                 } else if (item.action === 'delete') {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -71,6 +111,12 @@ export function useSync() {
                 // Get the last record's timestamp from local DB to perform a delta sync
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const table = (db as unknown as Record<string, any>)[tableName];
+                if (!table) {
+                    console.warn(`[Sync] Table ${tableName} not found in Dexie`);
+                    continue;
+                }
+
+                // Get the last record's timestamp from local DB to perform a delta sync
                 const lastRecord = await table
                     .orderBy('updated_at')
                     .last();
@@ -83,14 +129,19 @@ export function useSync() {
                     .eq("user_id", user.id)
                     .gt("updated_at", lastSyncTime);
 
-                if (error) throw error;
+                if (error) {
+                    // Log but don't stop the whole sync process for one table error
+                    console.error(`[Sync] Pull failed for ${tableName}:`, error);
+                    continue;
+                }
 
                 if (data && data.length > 0) {
+                    // bulkPut handles updates/inserts based on primary key (id)
                     await table.bulkPut(data);
                     console.log(`[Sync] Pulled ${data.length} new records for ${tableName}`);
                 }
             } catch (err) {
-                console.error(`[Sync] Pull failed for ${tableName}:`, err);
+                console.error(`[Sync] Exception during pull for ${tableName}:`, err);
             }
         }
     }, [user]);
@@ -98,8 +149,17 @@ export function useSync() {
     const syncAll = useCallback(async () => {
         if (!user || !navigator.onLine) return;
 
-        await pushLocalChanges();
-        await pullRemoteChanges();
+        try {
+            await pushLocalChanges();
+            await pullRemoteChanges();
+        } catch (error) {
+            console.error("[Sync] syncAll failed:", error);
+            toast({
+                title: "Sync failed",
+                description: "There was a problem syncing your data. We'll try again shortly.",
+                variant: "destructive"
+            });
+        }
     }, [user, pushLocalChanges, pullRemoteChanges]);
 
     useEffect(() => {
@@ -121,7 +181,15 @@ export function useSync() {
                 .on('postgres_changes', { event: '*', schema: 'public' }, () => {
                     pullRemoteChanges();
                 })
-                .subscribe();
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('[Sync] Realtime subscription active');
+                    } else if (status === 'CHANNEL_ERROR') {
+                        console.error('[Sync] Realtime subscription error');
+                    } else if (status === 'TIMED_OUT') {
+                        console.warn('[Sync] Realtime subscription timed out');
+                    }
+                });
 
             return () => {
                 clearInterval(interval);
@@ -131,5 +199,5 @@ export function useSync() {
         }
     }, [user, syncAll, pullRemoteChanges]);
 
-    return { syncAll, pushLocalChanges, pullRemoteChanges };
+    return useMemo(() => ({ syncAll, pushLocalChanges, pullRemoteChanges }), [syncAll, pushLocalChanges, pullRemoteChanges]);
 }

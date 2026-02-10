@@ -39,6 +39,7 @@ import ThemeForge from "./pages/ThemeForge";
 import AssetStudio from "./pages/AssetStudio";
 import SecretsVault from "./pages/SecretsVault";
 import Auth from "./pages/Auth";
+import SharedNote from "./pages/SharedNote";
 import NotFound from "./pages/NotFound";
 import { GraphView } from "./pages/Graph";
 import GitHubRepositories from "./pages/GitHubRepositories";
@@ -67,6 +68,7 @@ import DevBox from "./pages/DevBox";
 import Whiteboard from "./pages/Whiteboard";
 import ZenRoom from "./pages/ZenRoom";
 import ApiClient from "./pages/ApiClient";
+import Trash from "./pages/Trash";
 
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { queryClient, persistOptions } from "@/lib/query-client";
@@ -83,96 +85,99 @@ const App = () => (
               <CommandPaletteProvider>
                 <FocusProvider>
                   <Routes>
-                  {/* Auth route without layout */}
-                  <Route path="/auth" element={<Auth />} />
+                    {/* Auth route without layout */}
+                    <Route path="/auth" element={<Auth />} />
+                    <Route path="/p/:pageId" element={<SharedNote />} />
 
-                  {/* All other routes with layout and protection */}
-                  <Route
-                    path="/*"
-                    element={
-                      <ProtectedRoute>
-                        <AppLayout>
-                          <Routes>
-                            <Route path="/" element={<Dashboard />} />
-                            <Route path="/notes" element={<Notes />} />
-                            <Route path="/tasks" element={<Tasks />} />
-                            <Route path="/courses" element={<Courses />} />
-                            <Route path="/dsa" element={<DSA />} />
-                            <Route path="/resources" element={<Resources />} />
-                            <Route path="/flashcards" element={<Flashcards />} />
-                            <Route path="/pomodoro" element={<Pomodoro />} />
-                            <Route path="/habits" element={<Habits />} />
-                            <Route path="/projects" element={<Projects />} />
-                            <Route path="/ml-notes" element={<MLNotes />} />
-                            <Route path="/papers" element={<Papers />} />
-                            <Route path="/datasets" element={<Datasets />} />
-                            <Route path="/ai-assistant" element={<AIAssistant />} />
-                            <Route path="/analytics" element={<Analytics />} />
-                            <Route path="/settings" element={<Settings />} />
-                            <Route path="/cheat-sheets" element={<CheatSheets />} />
-                            <Route path="/interview-hub" element={<InterviewHub />} />
-                            <Route path="/growth-hub" element={<GrowthHub />} />
-                            <Route path="/builder-hub" element={<BuilderHub />} />
-                            <Route path="/regex-lab" element={<RegexLab />} />
-                            <Route path="/algo-visualizer" element={<AlgoVisualizer />} />
-                            <Route path="/dev-utils" element={<DevUtils />} />
-                            <Route path="/code-type" element={<CodeType />} />
-                            <Route path="/theme-forge" element={<ThemeForge />} />
-                            <Route path="/asset-studio" element={<AssetStudio />} />
-                            <Route path="/secrets" element={<SecretsVault />} />
-                            <Route path="/graph" element={<GraphView />} />
+                    {/* All other routes with layout and protection */}
+                    <Route
+                      path="/*"
+                      element={
+                        <ProtectedRoute>
+                          <AppLayout>
+                            <Routes>
+                              <Route path="/" element={<Dashboard />} />
+                              <Route path="/notes" element={<Notes />} />
+                              <Route path="/tasks" element={<Tasks />} />
+                              <Route path="/courses" element={<Courses />} />
+                              <Route path="/dsa" element={<DSA />} />
+                              <Route path="/resources" element={<Resources />} />
+                              <Route path="/flashcards" element={<Flashcards />} />
+                              <Route path="/pomodoro" element={<Pomodoro />} />
+                              <Route path="/habits" element={<Habits />} />
+                              <Route path="/projects" element={<Projects />} />
+                              <Route path="/ml-notes" element={<MLNotes />} />
+                              <Route path="/papers" element={<Papers />} />
+                              <Route path="/datasets" element={<Datasets />} />
+                              <Route path="/ai-assistant" element={<AIAssistant />} />
+                              <Route path="/analytics" element={<Analytics />} />
+                              <Route path="/settings" element={<Settings />} />
+                              <Route path="/trash" element={<Trash />} />
+                              <Route path="/cheat-sheets" element={<CheatSheets />} />
+                              <Route path="/interview-hub" element={<InterviewHub />} />
+                              <Route path="/growth-hub" element={<GrowthHub />} />
+                              <Route path="/builder-hub" element={<BuilderHub />} />
+                              <Route path="/regex-lab" element={<RegexLab />} />
+                              <Route path="/algo-visualizer" element={<AlgoVisualizer />} />
+                              <Route path="/dev-utils" element={<DevUtils />} />
+                              <Route path="/code-type" element={<CodeType />} />
+                              <Route path="/theme-forge" element={<ThemeForge />} />
+                              <Route path="/asset-studio" element={<AssetStudio />} />
+                              <Route path="/secrets" element={<SecretsVault />} />
+                              <Route path="/graph" element={<GraphView />} />
 
-                            {/* GitHub Routes */}
-                            <Route path="/github" element={<GitHubHub />} />
-                            <Route path="/github/operations" element={<GitOperations />} />
-                            <Route path="/github/file-manager" element={<GitHubFileManager />} />
-                            <Route path="/github/file-explorer" element={<GitHubFileExplorer />} />
-                            <Route path="/github/repositories" element={<GitHubRepositories />} />
-                            <Route path="/github/branches/:owner/:repo" element={<GitHubBranches />} />
+                              {/* GitHub Routes */}
+                              <Route path="/github" element={<GitHubHub />} />
+                              <Route path="/github/operations" element={<GitOperations />} />
+                              <Route path="/github/file-manager" element={<GitHubFileManager />} />
+                              <Route path="/github/file-explorer" element={<GitHubFileExplorer />} />
+                              <Route path="/github/repositories" element={<GitHubRepositories />} />
+                              <Route path="/github/branches" element={<GitHubBranches />} />
+                              <Route path="/github/branches/:owner/:repo" element={<GitHubBranches />} />
 
-                            {/* GitHub Editors */}
-                            <Route path="/github/editor" element={<GitHubEditor />} />
-                            <Route path="/github/editor/:owner/:repo" element={<GitHubEditor />} />
+                              {/* GitHub Editors */}
+                              <Route path="/github/editor" element={<GitHubEditor />} />
+                              <Route path="/github/editor/:owner/:repo" element={<GitHubEditor />} />
 
-                            {/* GitHub Gists */}
-                            <Route path="/github/gists" element={<GitHubGists />} />
-                            <Route path="/github/gists/new" element={<GitHubGistEditor />} />
-                            <Route path="/github/gists/:gistId" element={<GitHubGistViewer />} />
-                            <Route path="/github/gists/:gistId/edit" element={<GitHubGistEditor />} />
+                              {/* GitHub Gists */}
+                              <Route path="/github/gists" element={<GitHubGists />} />
+                              <Route path="/github/gists/new" element={<GitHubGistEditor />} />
+                              <Route path="/github/gists/:gistId" element={<GitHubGistViewer />} />
+                              <Route path="/github/gists/:gistId/edit" element={<GitHubGistEditor />} />
 
-                            {/* GitHub Actions */}
-                            <Route path="/github/actions" element={<GitHubActions />} />
-                            <Route path="/github/actions/:owner/:repo" element={<GitHubActions />} />
-                            <Route path="/github/actions/:owner/:repo/workflows/:workflowId" element={<GitHubWorkflowRuns />} />
+                              {/* GitHub Actions */}
+                              <Route path="/github/actions" element={<GitHubActions />} />
+                              <Route path="/github/actions/:owner/:repo" element={<GitHubActions />} />
+                              <Route path="/github/actions/:owner/:repo/workflows/:workflowId" element={<GitHubWorkflowRuns />} />
 
-                            {/* GitHub Codespaces */}
-                            <Route path="/github/codespaces" element={<GitHubCodespaces />} />
-                            <Route path="/github/codespaces/new" element={<GitHubCodespaceCreator />} />
-                            <Route path="/github/codespaces/:name/terminal" element={<GitHubCodespaceTerminal />} />
-                            <Route path="/github/codespaces/new" element={<GitHubCodespaceCreator />} />
+                              {/* GitHub Codespaces */}
+                              <Route path="/github/codespaces" element={<GitHubCodespaces />} />
+                              <Route path="/github/codespaces/new" element={<GitHubCodespaceCreator />} />
+                              <Route path="/github/codespaces/:name/terminal" element={<GitHubCodespaceTerminal />} />
+                              <Route path="/github/codespaces/new" element={<GitHubCodespaceCreator />} />
 
-                            {/* GitHub Backups */}
-                            <Route path="/github/backup" element={<GitHubBackup />} />
-                            <Route path="/github/backup/:owner/:repo" element={<GitHubBackupExplorer />} />
+                              {/* GitHub Backups */}
+                              <Route path="/github/backup" element={<GitHubBackup />} />
+                              <Route path="/github/backup/:owner/:repo" element={<GitHubBackupExplorer />} />
 
-                            {/* Shortcut Routes */}
-                            <Route path="/search" element={<GlobalSearch />} />
-                            <Route path="/gists" element={<GistHub />} />
-                            <Route path="/actions" element={<ActionsHub />} />
-                            <Route path="/actions/runs/:id" element={<WorkflowDetail />} />
+                              {/* Shortcut Routes */}
+                              <Route path="/search" element={<GlobalSearch />} />
+                              <Route path="/gists" element={<GistHub />} />
+                              <Route path="/actions" element={<ActionsHub />} />
+                              <Route path="/actions/runs/:id" element={<WorkflowDetail />} />
 
-                            {/* Tools Utilities */}
-                            <Route path="/devbox" element={<DevBox />} />
-                            <Route path="/whiteboard" element={<Whiteboard />} />
-                            <Route path="/zen-room" element={<ZenRoom />} />
-                            <Route path="/api-client" element={<ApiClient />} />
+                              {/* Tools Utilities */}
+                              <Route path="/devbox" element={<DevBox />} />
+                              <Route path="/whiteboard" element={<Whiteboard />} />
+                              <Route path="/zen-room" element={<ZenRoom />} />
+                              <Route path="/api-client" element={<ApiClient />} />
 
-                            <Route path="*" element={<NotFound />} />
-                          </Routes>
-                        </AppLayout>
-                      </ProtectedRoute>
-                    }
-                  />
+                              <Route path="*" element={<NotFound />} />
+                            </Routes>
+                          </AppLayout>
+                        </ProtectedRoute>
+                      }
+                    />
                   </Routes>
                 </FocusProvider>
               </CommandPaletteProvider>

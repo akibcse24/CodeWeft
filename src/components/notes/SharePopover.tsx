@@ -73,9 +73,9 @@ export function SharePopover({ pageId, isPublic, onPublicChange }: SharePopoverP
                         </>
                     ) : (
                         <>
-                            <Button variant="outline" size="sm" className="h-7 text-xs gap-2">
+                            <span className="flex items-center gap-2">
                                 Share
-                            </Button>
+                            </span>
                         </>
                     )}
                 </Button>

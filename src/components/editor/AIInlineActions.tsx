@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Sparkles, Wand2, Languages, MessageSquare, 
+import {
+  Sparkles, Wand2, Languages, MessageSquare,
   Minimize2, Maximize2, ChevronDown, Loader2,
   BookOpen, Pencil
 } from 'lucide-react';
@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, safeInvoke } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface AIInlineActionsProps {
@@ -25,11 +25,11 @@ interface AIInlineActionsProps {
   onClose?: () => void;
 }
 
-type AIAction = 
-  | 'improve' 
-  | 'fix-grammar' 
-  | 'shorter' 
-  | 'longer' 
+type AIAction =
+  | 'improve'
+  | 'fix-grammar'
+  | 'shorter'
+  | 'longer'
   | 'explain'
   | 'translate'
   | 'tone';
@@ -70,7 +70,7 @@ export function AIInlineActions({ selectedText, onReplace, onClose }: AIInlineAc
 
     try {
       let prompt = '';
-      
+
       switch (action) {
         case 'improve':
           prompt = `Improve the following text for clarity and readability. Keep the same meaning but make it better. Only return the improved text, nothing else:\n\n${selectedText}`;
@@ -95,8 +95,8 @@ export function AIInlineActions({ selectedText, onReplace, onClose }: AIInlineAc
           break;
       }
 
-      const { data, error } = await supabase.functions.invoke('ai-chat', {
-        body: { 
+      const { data, error } = await safeInvoke('ai-chat', {
+        body: {
           messages: [{ role: 'user', content: prompt }],
           type: 'inline-action'
         }
@@ -148,9 +148,9 @@ export function AIInlineActions({ selectedText, onReplace, onClose }: AIInlineAc
           Fix grammar
           {currentAction === 'fix-grammar' && <Loader2 className="h-3 w-3 ml-auto animate-spin" />}
         </DropdownMenuItem>
-        
+
         <DropdownMenuSeparator />
-        
+
         <DropdownMenuItem onClick={() => executeAction('shorter')} disabled={loading}>
           <Minimize2 className="h-4 w-4 mr-2" />
           Make shorter
@@ -161,17 +161,17 @@ export function AIInlineActions({ selectedText, onReplace, onClose }: AIInlineAc
           Make longer
           {currentAction === 'longer' && <Loader2 className="h-3 w-3 ml-auto animate-spin" />}
         </DropdownMenuItem>
-        
+
         <DropdownMenuSeparator />
-        
+
         <DropdownMenuItem onClick={() => executeAction('explain')} disabled={loading}>
           <BookOpen className="h-4 w-4 mr-2" />
           Explain this
           {currentAction === 'explain' && <Loader2 className="h-3 w-3 ml-auto animate-spin" />}
         </DropdownMenuItem>
-        
+
         <DropdownMenuSeparator />
-        
+
         <DropdownMenuSub>
           <DropdownMenuSubTrigger disabled={loading}>
             <Languages className="h-4 w-4 mr-2" />
@@ -179,7 +179,7 @@ export function AIInlineActions({ selectedText, onReplace, onClose }: AIInlineAc
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             {LANGUAGES.map((lang) => (
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 key={lang.code}
                 onClick={() => executeAction('translate', lang.name)}
               >
@@ -188,7 +188,7 @@ export function AIInlineActions({ selectedText, onReplace, onClose }: AIInlineAc
             ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        
+
         <DropdownMenuSub>
           <DropdownMenuSubTrigger disabled={loading}>
             <MessageSquare className="h-4 w-4 mr-2" />
@@ -196,7 +196,7 @@ export function AIInlineActions({ selectedText, onReplace, onClose }: AIInlineAc
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             {TONES.map((tone) => (
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 key={tone.id}
                 onClick={() => executeAction('tone', tone.name)}
               >

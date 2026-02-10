@@ -23,7 +23,8 @@ import {
   Database,
   ArrowUpRight,
   Monitor,
-  Fingerprint
+  Fingerprint,
+  Trash2
 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,7 +36,7 @@ import { useDSAProblems } from "@/hooks/useDSAProblems";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import { useProfile } from "@/hooks/useProfile";
 import { VoiceCapture } from "@/components/ai/VoiceCapture";
 import { cn } from "@/lib/utils";
@@ -55,7 +56,7 @@ export default function Dashboard() {
   const { pages } = usePages();
   const { tasks } = useTasks();
   const { problems } = useDSAProblems();
-  const { createPage } = usePages();
+  const { createPage, deletePage } = usePages();
   const { profile } = useProfile();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -228,71 +229,79 @@ export default function Dashboard() {
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,hsla(var(--primary)/0.1),transparent)] pointer-events-none" />
                 {isClient && (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={activityData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                    <BarChart data={activityData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={2}>
                       <defs>
-                        <linearGradient id="neuralGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                        <linearGradient id="neuralBarGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.95} />
+                          <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.4} />
                         </linearGradient>
-                        <linearGradient id="tacticalGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                        <linearGradient id="tacticalBarGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#34d399" stopOpacity={0.95} />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity={0.4} />
                         </linearGradient>
-                        <linearGradient id="logicGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                        <linearGradient id="logicBarGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#a78bfa" stopOpacity={0.95} />
+                          <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0.4} />
                         </linearGradient>
-                        <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                          <feGaussianBlur stdDeviation="4" result="blur" />
-                          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        <filter id="barGlow">
+                          <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                          <feMerge>
+                            <feMergeNode in="coloredBlur" />
+                            <feMergeNode in="SourceGraphic" />
+                          </feMerge>
                         </filter>
                       </defs>
-                      <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                      <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="rgba(255,255,255,0.04)" />
                       <XAxis
                         dataKey="day"
                         axisLine={false}
                         tickLine={false}
-                        tick={{ fill: 'rgba(255,255,255,0.2)', fontSize: 10, fontWeight: 900 }}
-                        dy={25}
+                        tick={{ fill: 'rgba(255,255,255,0.25)', fontSize: 11, fontWeight: 900, letterSpacing: '0.05em' }}
+                        dy={15}
                       />
-                      <YAxis hide />
+                      <YAxis
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: 'rgba(255,255,255,0.15)', fontSize: 10, fontWeight: 700 }}
+                        width={35}
+                      />
                       <Tooltip
-                        cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1 }}
+                        cursor={{ fill: 'rgba(255,255,255,0.03)', radius: 12 }}
                         content={({ active, payload }) => {
                           if (active && payload && payload.length) {
                             const data = payload[0].payload;
                             return (
-                              <div className="bg-background/40 backdrop-blur-3xl p-8 border border-white/10 rounded-[2.5rem] shadow-2xl space-y-4 min-w-[240px]">
-                                <div className="flex justify-between items-center mb-2">
+                              <div className="bg-background/60 backdrop-blur-3xl p-6 border border-white/10 rounded-2xl shadow-2xl space-y-3 min-w-[220px]">
+                                <div className="flex justify-between items-center mb-1">
                                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Neural Synchrony</span>
                                   <span className="text-[10px] font-bold opacity-30">{data.day}</span>
                                 </div>
 
-                                <div className="space-y-3">
-                                  <div className="flex items-center justify-between group/tip">
+                                <div className="space-y-2.5">
+                                  <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]" />
+                                      <div className="w-2.5 h-2.5 rounded-sm bg-gradient-to-b from-blue-400 to-blue-600 shadow-[0_0_8px_#3b82f6]" />
                                       <span className="text-xs font-bold opacity-60">Neural Archives</span>
                                     </div>
                                     <span className="text-xs font-black tracking-tight">{data.neural}</span>
                                   </div>
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]" />
+                                      <div className="w-2.5 h-2.5 rounded-sm bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-[0_0_8px_#10b981]" />
                                       <span className="text-xs font-bold opacity-60">Tactical Directives</span>
                                     </div>
                                     <span className="text-xs font-black tracking-tight">{data.tactical}</span>
                                   </div>
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
-                                      <div className="w-1.5 h-1.5 rounded-full bg-purple-500 shadow-[0_0_8px_#8b5cf6]" />
+                                      <div className="w-2.5 h-2.5 rounded-sm bg-gradient-to-b from-purple-400 to-purple-600 shadow-[0_0_8px_#8b5cf6]" />
                                       <span className="text-xs font-bold opacity-60">Logic Solutions</span>
                                     </div>
                                     <span className="text-xs font-black tracking-tight">{data.logic}</span>
                                   </div>
                                 </div>
 
-                                <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                                <div className="pt-3 border-t border-white/5 flex items-center justify-between">
                                   <span className="text-sm font-black uppercase tracking-widest text-foreground">Total Load</span>
                                   <div className="flex items-baseline gap-1">
                                     <span className="text-2xl font-black tracking-tighter text-primary">{data.throughput}</span>
@@ -305,42 +314,34 @@ export default function Dashboard() {
                           return null;
                         }}
                       />
-                      <Area
-                        type="monotone"
+                      <Bar
                         dataKey="neural"
-                        stackId="1"
-                        stroke="transparent"
-                        fill="url(#neuralGrad)"
-                        animationDuration={2000}
+                        stackId="throughput"
+                        fill="url(#neuralBarGrad)"
+                        radius={[0, 0, 0, 0]}
+                        animationDuration={1200}
+                        animationBegin={0}
+                        style={{ filter: 'url(#barGlow)' }}
                       />
-                      <Area
-                        type="monotone"
+                      <Bar
                         dataKey="tactical"
-                        stackId="1"
-                        stroke="transparent"
-                        fill="url(#tacticalGrad)"
-                        animationDuration={2500}
+                        stackId="throughput"
+                        fill="url(#tacticalBarGrad)"
+                        radius={[0, 0, 0, 0]}
+                        animationDuration={1200}
+                        animationBegin={200}
+                        style={{ filter: 'url(#barGlow)' }}
                       />
-                      <Area
-                        type="monotone"
+                      <Bar
                         dataKey="logic"
-                        stackId="1"
-                        stroke="transparent"
-                        fill="url(#logicGrad)"
-                        animationDuration={3000}
+                        stackId="throughput"
+                        fill="url(#logicBarGrad)"
+                        radius={[6, 6, 0, 0]}
+                        animationDuration={1200}
+                        animationBegin={400}
+                        style={{ filter: 'url(#barGlow)' }}
                       />
-                      <Area
-                        type="monotone"
-                        dataKey="throughput"
-                        stroke="hsla(var(--primary), 1)"
-                        strokeWidth={4}
-                        fill="transparent"
-                        animationDuration={3500}
-                        dot={{ r: 3, fill: 'hsla(var(--primary), 1)', strokeWidth: 0, fillOpacity: 0.5 }}
-                        activeDot={{ r: 6, fill: '#fff', strokeWidth: 0 }}
-                        style={{ filter: "url(#glow)" }}
-                      />
-                    </AreaChart>
+                    </BarChart>
                   </ResponsiveContainer>
                 )}
               </CardContent>
@@ -434,6 +435,21 @@ export default function Dashboard() {
                           {format(new Date(page.updated_at), "dd.MM.yy — HH:mm")}
                         </div>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground/20 hover:text-destructive hover:bg-destructive/10 transition-colors z-20"
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (confirm("Move this page to trash?")) {
+                            await deletePage.mutateAsync(page.id);
+                            toast({ title: "Page moved to trash" });
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </Link>
                 </motion.div>

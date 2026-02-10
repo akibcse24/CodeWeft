@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -108,7 +108,7 @@ export function useConfirmDialog() {
     </AlertDialog>
   ), [isOpen, options, isLoading, handleConfirm, handleCancel]);
 
-  return { confirm, ConfirmDialog };
+  return useMemo(() => ({ confirm, ConfirmDialog }), [confirm, ConfirmDialog]);
 }
 
 export function usePromptDialog() {
@@ -135,7 +135,7 @@ export function usePromptDialog() {
 
   const handleConfirm = useCallback(async () => {
     setIsLoading(true);
-    
+
     // Validate if validator provided
     if (options.validate) {
       const validationError = options.validate(value);
@@ -213,7 +213,7 @@ export function usePromptDialog() {
     </Dialog>
   ), [isOpen, options, value, error, isLoading, handleConfirm, handleCancel, handleKeyDown]);
 
-  return { prompt, PromptDialog };
+  return useMemo(() => ({ prompt, PromptDialog }), [prompt, PromptDialog]);
 }
 
 // Hook that provides both confirm and prompt dialogs
@@ -226,11 +226,11 @@ export function useDialogs() {
       <confirmDialog.ConfirmDialog />
       <promptDialog.PromptDialog />
     </>
-  ), [confirmDialog, promptDialog]);
+  ), [confirmDialog.ConfirmDialog, promptDialog.PromptDialog]);
 
-  return {
+  return useMemo(() => ({
     confirm: confirmDialog.confirm,
     prompt: promptDialog.prompt,
     Dialogs,
-  };
+  }), [confirmDialog.confirm, promptDialog.prompt, Dialogs]);
 }

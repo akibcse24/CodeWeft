@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -17,6 +17,10 @@ import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Globe, Copy, Check, Share2 } from "lucide-react";
 import { BlockEditor } from "@/components/editor/BlockEditor";
 import { Block } from "@/types/editor.types";
 import { EmojiPicker } from "@/components/ui/EmojiPicker";
@@ -57,8 +61,11 @@ type SortOption = "updated" | "created" | "title";
 export default function Notes() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { pages, favoritePages, isLoading, createPage, updatePage, deletePage, toggleFavorite } = usePages();
+  const { pages, favoritePages, isLoading, createPage, updatePage, deletePage, toggleFavorite, togglePublic } = usePages();
   const { toast } = useToast();
+
+
+
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
@@ -96,6 +103,27 @@ export default function Notes() {
   const [recentPageIds, setRecentPageIds] = useState<string[]>([]);
   const [backlinksOpen, setBacklinksOpen] = useState(false);
 
+  const selectedPage = pages.find(p => p.id === selectedPageId);
+  const allTags = [...new Set(pages.flatMap(p => (p.tags as string[]) || []))] as string[];
+
+
+  // Refs for auto-save data
+  const mountedRef = useRef(true);
+  const isDirtyRef = useRef(false);
+  const latestStateRef = useRef({ pageTitle, pageIcon, blocks, pageTags, pageCover, pageProperties, pageSchema, viewType, isPublic: !!selectedPage?.is_public });
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Update latest state ref whenever data changes
+  useEffect(() => {
+    latestStateRef.current = { pageTitle, pageIcon, blocks, pageTags, pageCover, pageProperties, pageSchema, viewType, isPublic: !!selectedPage?.is_public };
+  }, [pageTitle, pageIcon, blocks, pageTags, pageCover, pageProperties, pageSchema, viewType, selectedPage?.is_public]);
+
   const currentText = extractTextFromBlocks(blocks);
   const { results: resonanceResults, isSearching: isResonating } = useResonance(currentText, !!selectedPageId && !isFocusMode);
 
@@ -122,6 +150,18 @@ export default function Notes() {
   }, [selectedPageId]);
 
   // Handle URL params causing page selection or creation
+  const handleCreatePage = useCallback(async (parentId?: string, customTitle?: string, customBlocks?: Block[]) => {
+    const result = await createPage.mutateAsync({
+      title: customTitle || "Untitled",
+      icon: "📝",
+      content: customBlocks as unknown as Json || [{ id: "1", type: "paragraph", content: "" }],
+      parent_id: parentId,
+    });
+    setSelectedPageId(result.id);
+    if (customBlocks) setBlocks(customBlocks);
+    toast({ title: "New page created" });
+  }, [createPage, toast]);
+
   useEffect(() => {
     const shouldCreate = searchParams.get("new") === "true";
     const targetId = searchParams.get("id");
@@ -137,7 +177,7 @@ export default function Notes() {
     } else if (targetId && targetId !== selectedPageId) {
       setSelectedPageId(targetId);
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, handleCreatePage, selectedPageId]);
 
   useEffect(() => {
     const handleStorage = () => {
@@ -151,11 +191,15 @@ export default function Notes() {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  const selectedPage = pages.find(p => p.id === selectedPageId);
-  const allTags = [...new Set(pages.flatMap(p => (p.tags as string[]) || []))];
+
+
+  // Track if we've already loaded this page to prevent cloud sync from overwriting edits
+  const [loadedPageId, setLoadedPageId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (selectedPage) {
+    // Only load page content when switching to a DIFFERENT page
+    // This prevents cloud sync from overwriting local edits
+    if (selectedPageId && selectedPageId !== loadedPageId && selectedPage) {
       setPageTitle(selectedPage.title);
       setPageIcon(selectedPage.icon || "📝");
       setPageTags((selectedPage.tags as string[]) || []);
@@ -166,72 +210,120 @@ export default function Notes() {
       setPageProperties(getPageProperties(content));
       setPageSchema(getPageSchema(content));
       setViewType(getPageViewType(content));
+
+      setLoadedPageId(selectedPageId);
+      isDirtyRef.current = false;
     }
-  }, [selectedPageId, selectedPage]);
+  }, [selectedPageId, selectedPage, loadedPageId]);
 
-  const handleCreatePage = async (parentId?: string, customTitle?: string, customBlocks?: Block[]) => {
-    const result = await createPage.mutateAsync({
-      title: customTitle || "Untitled",
-      icon: "📝",
-      content: customBlocks as unknown as Json || [{ id: "1", type: "paragraph", content: "" }],
-      parent_id: parentId,
-    });
-    setSelectedPageId(result.id);
-    if (customBlocks) setBlocks(customBlocks);
-    toast({ title: "New page created" });
-  };
 
-  const handleSave = useCallback(async () => {
+
+  const performSave = useCallback(async (data: typeof latestStateRef.current) => {
     if (!selectedPageId) return;
-    setIsSaving(true);
+    if (mountedRef.current) setIsSaving(true);
 
-    const content = createPageContent(blocks, {
-      properties: pageProperties,
-      schema: pageSchema,
-      viewType: viewType,
-      type: viewType ? 'database' : 'page'
+    const content = createPageContent(data.blocks, {
+      properties: data.pageProperties,
+      schema: data.pageSchema,
+      viewType: data.viewType,
+      type: data.viewType ? 'database' : 'page'
     });
 
-    await updatePage.mutateAsync({
-      id: selectedPageId,
-      title: pageTitle,
-      icon: pageIcon,
-      content: content as unknown as Json,
-      tags: pageTags,
-      cover_url: pageCover,
-    });
-
-    // Semantic Indexing
     try {
-      setIsIndexing(true);
-      const text = extractTextFromBlocks(blocks);
-      if (text.trim().length > 20) {
-        await memoryService.storeLongTerm(
-          text,
-          {
-            type: "knowledge",
-            importance: 0.5,
-            frequency: 1,
-          },
-          `note_${selectedPageId}`
-        );
+      await updatePage.mutateAsync({
+        id: selectedPageId,
+        title: data.pageTitle,
+        icon: data.pageIcon,
+        content: content as unknown as Json,
+        tags: data.pageTags,
+        cover_url: data.pageCover,
+        is_public: data.isPublic,
+      });
+
+      // Semantic Indexing
+      try {
+        if (mountedRef.current) setIsIndexing(true);
+        const text = extractTextFromBlocks(data.blocks);
+        if (text.trim().length > 20) {
+          await memoryService.storeLongTerm(
+            text,
+            {
+              type: "knowledge",
+              importance: 0.5,
+              frequency: 1,
+            },
+            `note_${selectedPageId}`
+          );
+        }
+      } catch (err) {
+        console.error("Indexing failed:", err);
+      } finally {
+        if (mountedRef.current) setIsIndexing(false);
       }
-    } catch (err) {
-      console.error("Indexing failed:", err);
+
+      // Reset dirty flag only after successful save
+      isDirtyRef.current = false;
+    } catch (error) {
+      console.error("Save failed:", error);
+      // Don't show toast if unmounted to avoid loop
+      if (mountedRef.current) {
+        toast({ title: "Save failed", variant: "destructive" });
+      }
     } finally {
-      setIsIndexing(false);
+      if (mountedRef.current) setIsSaving(false);
     }
+  }, [selectedPageId, updatePage, toast]);
 
-    setIsSaving(false);
-  }, [selectedPageId, pageTitle, pageIcon, blocks, pageTags, pageCover, updatePage, pageProperties, pageSchema, viewType]);
+  // Expose handleSave for UI buttons, using current state
+  const handleSave = useCallback(() => {
+    performSave(latestStateRef.current);
+  }, [performSave]);
 
+  // Auto-save effect with debounce
   useEffect(() => {
     if (!selectedPageId) return;
+
+    // Implicit dirty check removed to prevent infinite loops on load.
+    // We now explicitly set isDirtyRef.current = true in state setters.
+
     const timer = setTimeout(() => {
-      handleSave();
+      // Only auto-save if dirty
+      if (isDirtyRef.current) {
+        handleSave();
+      }
     }, 1000);
+
     return () => clearTimeout(timer);
-  }, [pageTitle, blocks, pageIcon, pageTags, pageCover, pageProperties, pageSchema, viewType, selectedPageId, handleSave]);
+  }, [pageTitle, blocks, pageIcon, pageTags, pageCover, pageProperties, pageSchema, viewType, selectedPageId, loadedPageId, handleSave]);
+
+  // Force save on navigation/cleanup if dirty
+  useEffect(() => {
+    return () => {
+      if (isDirtyRef.current && selectedPageId) {
+        // Use the ref because state might be stale or unmounted
+        // We use the mutateAsync directly to avoid state updates (setIsSaving) 
+        // that trigger the loop during unmount
+        const data = latestStateRef.current;
+        const content = createPageContent(data.blocks, {
+          properties: data.pageProperties,
+          schema: data.pageSchema,
+          viewType: data.viewType,
+          type: data.viewType ? 'database' : 'page'
+        });
+
+        updatePage.mutate({
+          id: selectedPageId,
+          title: data.pageTitle,
+          icon: data.pageIcon,
+          content: content as unknown as Json,
+          tags: data.pageTags,
+          cover_url: data.pageCover,
+          is_public: data.isPublic,
+        });
+        isDirtyRef.current = false;
+      }
+    };
+  }, [selectedPageId, performSave]);
 
   // Handle block link scrolling
   useEffect(() => {
@@ -393,25 +485,102 @@ export default function Notes() {
                 "px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all duration-300",
                 isIndexing ? "text-primary/70 opacity-100" : "text-primary/70 opacity-0 w-0 overflow-hidden"
               )}>
-                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                <div className="h-1.5 w-1.5 rounded-full bg-primary/70 animate-pulse" />
                 <span>Indexing</span>
               </div>
 
-              <div className={cn(
-                "px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-all duration-300",
-                isSaving ? "text-muted-foreground opacity-100" : "text-muted-foreground/40 opacity-100"
-              )}>
-                <div className={cn("h-1.5 w-1.5 rounded-full transition-colors duration-300", isSaving ? "bg-primary" : "bg-muted-foreground/30")} />
-                <span className="w-12">{isSaving ? "Saving" : "Saved"}</span>
+              <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-opacity duration-500 min-w-[80px]">
+                <div className={cn("h-1.5 w-1.5 rounded-full transition-all duration-500", isSaving ? "bg-primary animate-pulse" : "bg-muted-foreground/30")} />
+                <span className="text-muted-foreground/60 transition-colors duration-300">
+                  {isSaving ? "Saving..." : "Saved"}
+                </span>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="hover:bg-warning/10 hover:text-warning transition-colors rounded-xl"
-                onClick={() => handleToggleFavorite(selectedPageId, selectedPage.is_favorite || false)}
-              >
-                <Star className={cn("h-5 w-5", selectedPage.is_favorite && "fill-warning text-warning")} />
-              </Button>
+              <div className="flex items-center gap-1 bg-background/50 backdrop-blur-sm p-1 rounded-lg border border-border/40 shadow-sm">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => handleDeletePage(selectedPageId)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Trash</span>
+                </Button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground">
+                      <Share2 className="h-4 w-4" />
+                      <span className="hidden sm:inline">Share</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="end">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium leading-none">Share to Web</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Publish this note to the web. Anyone with the link can view it.
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between space-x-2">
+                        <Label htmlFor="public-access" className="flex flex-col space-y-1">
+                          <span>Public Access</span>
+                          <span className="font-normal text-xs text-muted-foreground">
+                            {selectedPage?.is_public ? "Live on the web" : "Private"}
+                          </span>
+                        </Label>
+                        <Switch
+                          id="public-access"
+                          checked={selectedPage?.is_public || false}
+                          onCheckedChange={(checked) => {
+                            if (selectedPageId) {
+                              togglePublic.mutate({ id: selectedPageId, isPublic: !checked }); // Toggle logic handles inversion
+                            }
+                          }}
+                        />
+                      </div>
+                      {selectedPage?.is_public && (
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            readOnly
+                            value={`${window.location.origin}/p/${selectedPageId}`}
+                            className="h-8 text-xs font-mono"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2"
+                            onClick={() => {
+                              navigator.clipboard.writeText(`${window.location.origin}/p/${selectedPageId}`);
+                              toast({ title: "Link copied to clipboard" });
+                            }}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2"
+                            onClick={() => window.open(`/p/${selectedPageId}`, '_blank')}
+                          >
+                            <Globe className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 transition-colors",
+                    selectedPage?.is_favorite ? "text-yellow-500 hover:text-yellow-600 hover:bg-yellow-500/10" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => selectedPageId && toggleFavorite.mutate({ id: selectedPageId, isFavorite: !!selectedPage?.is_favorite })}
+                >
+                  <Star className={cn("h-4 w-4", selectedPage?.is_favorite && "fill-current")} />
+                </Button>
+              </div>
               <ExportMenu blocks={blocks} pageTitle={pageTitle} pageData={selectedPage} />
               <PageWidthSelector value={pageWidth} onChange={setPageWidth} />
               <DropdownMenu>
@@ -438,7 +607,7 @@ export default function Notes() {
 
           {!isFocusMode && pageCover && (
             <div className="-mx-4 md:-mx-8 lg:-mx-12 mb-4">
-              <CoverImage coverUrl={pageCover} onCoverChange={setPageCover} />
+              <CoverImage coverUrl={pageCover} onCoverChange={(c) => { setPageCover(c); isDirtyRef.current = true; }} />
             </div>
           )}
 
@@ -447,20 +616,21 @@ export default function Notes() {
               title={pageTitle}
               icon={pageIcon}
               coverUrl={pageCover}
-              onTitleChange={setPageTitle}
-              onIconChange={setPageIcon}
-              onRemoveIcon={() => setPageIcon("")}
+              onTitleChange={(t) => { setPageTitle(t); isDirtyRef.current = true; }}
+              onIconChange={(i) => { setPageIcon(i); isDirtyRef.current = true; }}
+              onRemoveIcon={() => { setPageIcon(""); isDirtyRef.current = true; }}
               onCoverClick={() => {
                 // Add a default gradient cover if none exists
                 if (!pageCover) {
                   setPageCover("linear-gradient(135deg, #667eea 0%, #764ba2 100%)");
+                  isDirtyRef.current = true;
                 }
               }}
               pageId={selectedPageId}
               isPublic={selectedPage.is_public || false}
               onPublicChange={(isPublic) => {
-                if (selectedPage) {
-                  selectedPage.is_public = isPublic;
+                if (selectedPageId) {
+                  togglePublic.mutate({ id: selectedPageId, isPublic: !isPublic });
                 }
               }}
             />
@@ -469,10 +639,10 @@ export default function Notes() {
               <PagePropertiesPanel
                 properties={pageProperties}
                 schema={pageSchema}
-                onChange={setPageProperties}
-                onSchemaChange={setPageSchema}
+                onChange={(p) => { setPageProperties(p); isDirtyRef.current = true; }}
+                onSchemaChange={(s) => { setPageSchema(s); isDirtyRef.current = true; }}
                 tags={pageTags}
-                onTagsChange={setPageTags}
+                onTagsChange={(t) => { setPageTags(t); isDirtyRef.current = true; }}
                 lastEdited={format(new Date(selectedPage.updated_at), "MMM d, h:mm a")}
               />
             )}
@@ -512,7 +682,7 @@ export default function Notes() {
                   <GalleryView pageId={selectedPageId} schema={pageSchema} onSchemaChange={setPageSchema} />
                 ) : (
                   <div className="prose prose-slate dark:prose-invert max-w-none">
-                    <BlockEditor blocks={blocks} onChange={setBlocks} pages={pages} onNavigate={(pageId) => navigate(`/notes?page=${pageId}`)} />
+                    <BlockEditor blocks={blocks} onChange={(b) => { setBlocks(b); isDirtyRef.current = true; }} pages={pages} onNavigate={(pageId) => navigate(`/notes?page=${pageId}`)} />
                   </div>
                 )}
               </motion.div>
@@ -679,12 +849,12 @@ export default function Notes() {
                   </Badge>
                   {allTags.map(tag => (
                     <Badge
-                      key={tag}
+                      key={tag as string}
                       variant={filterTag === tag ? "default" : "outline"}
                       className="cursor-pointer rounded-lg text-[10px]"
-                      onClick={() => setFilterTag(tag)}
+                      onClick={() => setFilterTag(tag as string)}
                     >
-                      {tag}
+                      {tag as string}
                     </Badge>
                   ))}
                 </div>
@@ -703,7 +873,13 @@ export default function Notes() {
             </div>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {favoriteNotes.map(page => (
-                <PageCard key={page.id} page={page} allPages={pages} onSelect={() => setSelectedPageId(page.id)} />
+                <PageCard
+                  key={page.id}
+                  page={page}
+                  allPages={pages}
+                  onSelect={() => setSelectedPageId(page.id)}
+                  onDelete={() => handleDeletePage(page.id)}
+                />
               ))}
             </div>
           </section>
@@ -736,7 +912,13 @@ export default function Notes() {
           ) : (
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {(searchQuery || filterTag ? filteredPages : otherNotes).map(page => (
-                <PageCard key={page.id} page={page} allPages={pages} onSelect={() => setSelectedPageId(page.id)} />
+                <PageCard
+                  key={page.id}
+                  page={page}
+                  allPages={pages}
+                  onSelect={() => setSelectedPageId(page.id)}
+                  onDelete={() => handleDeletePage(page.id)}
+                />
               ))}
             </div>
           )}
@@ -763,7 +945,7 @@ export default function Notes() {
   );
 }
 
-function PageCard({ page, allPages, onSelect }: { page: Tables<'pages'>; allPages: Tables<'pages'>[]; onSelect: () => void }) {
+function PageCard({ page, allPages, onSelect, onDelete }: { page: Tables<'pages'>; allPages: Tables<'pages'>[]; onSelect: () => void; onDelete: () => void }) {
   const content = page.content;
   const blocks = getPageBlocks(content);
   const textPreview = blocks.find(b => b.type === 'paragraph')?.content || "";
@@ -803,12 +985,29 @@ function PageCard({ page, allPages, onSelect }: { page: Tables<'pages'>; allPage
               <Clock className="h-3 w-3" />
               {format(new Date(page.updated_at), 'MMM d, yyyy')}
             </div>
-            <div className="flex gap-1.5 overflow-hidden">
-              {(page.tags as string[])?.slice(0, 2).map(tag => (
-                <Badge key={tag} variant="secondary" className="text-[9px] uppercase px-2 py-0.5 rounded-md bg-accent/50 text-accent-foreground font-bold">
-                  {tag}
-                </Badge>
-              ))}
+
+            <div className="flex items-center gap-2">
+              <div className="flex gap-1.5 overflow-hidden">
+                {(page.tags as string[])?.slice(0, 2).map(tag => (
+                  <Badge key={tag} variant="secondary" className="text-[9px] uppercase px-2 py-0.5 rounded-md bg-accent/50 text-accent-foreground font-bold">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 rounded-md hover:bg-destructive/10 hover:text-destructive opacity-0 group-hover:opacity-100 transition-all duration-300"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm("Move this page to trash?")) {
+                    onDelete();
+                  }
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
             </div>
           </div>
         </CardContent>

@@ -304,10 +304,9 @@
   }
 
   .sidebar-glass {
-    background: linear-gradient(180deg, 
-      hsla(var(--sidebar-background) / 0.95) 0%, 
-      hsla(var(--sidebar-background) / 0.85) 100%
-    );
+    background: linear-gradient(180deg,
+        hsla(var(--sidebar-background) / 0.95) 0%,
+        hsla(var(--sidebar-background) / 0.85) 100%);
     backdrop-filter: blur(20px) saturate(180%);
     border-right: 1px solid hsla(var(--sidebar-border) / 0.4);
   }
@@ -456,10 +455,9 @@
 
 /* Sidebar Specific Animations & Effects */
 .sidebar-item-active {
-  background: linear-gradient(90deg, 
-    hsla(var(--primary) / 0.1) 0%, 
-    transparent 100%
-  );
+  background: linear-gradient(90deg,
+      hsla(var(--primary) / 0.1) 0%,
+      transparent 100%);
   box-shadow: inset 2px 0 0 0 hsl(var(--primary));
 }
 
@@ -469,12 +467,11 @@
 
 .sidebar-section-divider {
   height: 1px;
-  background: linear-gradient(90deg, 
-    transparent 0%, 
-    hsla(var(--sidebar-border) / 0.6) 20%, 
-    hsla(var(--sidebar-border) / 0.6) 80%, 
-    transparent 100%
-  );
+  background: linear-gradient(90deg,
+      transparent 0%,
+      hsla(var(--sidebar-border) / 0.6) 20%,
+      hsla(var(--sidebar-border) / 0.6) 80%,
+      transparent 100%);
   margin: 1.25rem 0.5rem;
 }
 
@@ -690,4 +687,17 @@
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
+}
+
+/* Hide Tldraw Watermark - Enhanced Selectors */
+.tl-watermark,
+.tl-watermark_1,
+div[class*="watermark"],
+a[href*="tldraw.com"] {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  z-index: -9999 !important;
 }

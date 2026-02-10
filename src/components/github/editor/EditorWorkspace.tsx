@@ -60,14 +60,18 @@ export function EditorWorkspace() {
                 sha
             );
         },
-        onSuccess: (_, variables) => {
+        onSuccess: (data, variables) => {
             toast.success(`Saved ${variables.path}`);
             queryClient.invalidateQueries({ queryKey: ['github', 'file', owner, repo, variables.path] });
 
-            // Mark tab as clean
+            // Mark tab as clean and update SHA
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const responseData = data as any;
+            const newSha = responseData?.content?.sha || responseData?.sha; // GitHub API structure varies
+
             setTabs(prev =>
                 prev.map(tab =>
-                    tab.path === variables.path ? { ...tab, isDirty: false } : tab
+                    tab.path === variables.path ? { ...tab, isDirty: false, sha: newSha || tab.sha } : tab
                 )
             );
         },
@@ -96,13 +100,14 @@ export function EditorWorkspace() {
                 : '';
 
             const newTab: EditorTab = {
-                id: `${file.path}-${Date.now()}`,
+                id: file.path,
                 filename: file.name,
                 path: file.path,
                 content,
                 language: getLanguageFromFilename(file.name),
                 isDirty: false,
                 isNew: false,
+                sha: fileContent.sha, // Store SHA for updates
             };
 
             setTabs(prev => [...prev, newTab]);
@@ -141,6 +146,7 @@ export function EditorWorkspace() {
         saveFileMutation.mutate({
             path: tab.path,
             content: tab.content,
+            sha: tab.sha, // Pass SHA for update
         });
     }, [tabs, saveFileMutation]);
 
@@ -189,77 +195,78 @@ export function EditorWorkspace() {
         <>
             <Dialogs />
             <div className="flex h-screen flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b px-4 py-2">
-                <div>
-                    <h2 className="text-lg font-semibold">{repository?.name}</h2>
-                    <p className="text-sm text-muted-foreground">
-                        {owner}/{repo} • {branch}
-                    </p>
-                </div>
-                {activeTab?.isDirty && (
-                    <Button
-                        size="sm"
-                        onClick={() => handleTabSave(activeTab.id)}
-                        disabled={saveFileMutation.isPending}
-                    >
-                        <Save className="mr-2 h-4 w-4" />
-                        Save
-                    </Button>
-                )}
-            </div>
-
-            <div className="flex flex-1 overflow-hidden">
-                {/* File Tree Sidebar */}
-                <div className="w-64 border-r flex flex-col overflow-hidden">
-                    <div className="px-4 py-2 border-b">
-                        <h3 className="font-semibold text-sm">Files</h3>
+                {/* Header */}
+                <div className="flex items-center justify-between border-b px-4 py-2">
+                    <div>
+                        <h2 className="text-lg font-semibold">{repository?.name}</h2>
+                        <p className="text-sm text-muted-foreground">
+                            {owner}/{repo} • {branch}
+                        </p>
                     </div>
-                    {fileTree && (
-                        <FileTree
-                            files={fileTree}
-                            onFileSelect={handleFileSelect}
-                            selectedPath={activeTab?.path}
-                        />
+                    {activeTab?.isDirty && (
+                        <Button
+                            size="sm"
+                            onClick={() => handleTabSave(activeTab.id)}
+                            disabled={saveFileMutation.isPending}
+                        >
+                            <Save className="mr-2 h-4 w-4" />
+                            Save
+                        </Button>
                     )}
                 </div>
 
-                {/* Editor Area */}
-                <div className="flex-1 flex flex-col overflow-hidden">
-                    <TabManager
-                        tabs={tabs}
-                        activeTabId={activeTabId}
-                        onTabChange={setActiveTabId}
-                        onTabClose={handleTabClose}
-                        onTabSave={handleTabSave}
-                        onCloseAll={() => setTabs([])}
-                        onCloseOthers={(tabId) => setTabs(prev => prev.filter(t => t.id === tabId))}
-                    />
-
-                    <div className="flex-1 overflow-hidden">
-                        {activeTab ? (
-                            <CodeEditor
-                                value={activeTab.content}
-                                language={activeTab.language}
-                                onChange={handleEditorChange}
-                                onSave={(value) => {
-                                    if (activeTab) {
-                                        saveFileMutation.mutate({
-                                            path: activeTab.path,
-                                            content: value,
-                                        });
-                                    }
-                                }}
+                <div className="flex flex-1 overflow-hidden">
+                    {/* File Tree Sidebar */}
+                    <div className="w-64 border-r flex flex-col overflow-hidden">
+                        <div className="px-4 py-2 border-b">
+                            <h3 className="font-semibold text-sm">Files</h3>
+                        </div>
+                        {fileTree && (
+                            <FileTree
+                                files={fileTree}
+                                onFileSelect={handleFileSelect}
+                                selectedPath={activeTab?.path}
                             />
-                        ) : (
-                            <div className="flex items-center justify-center h-full text-muted-foreground">
-                                <p>Select a file to start editing</p>
-                            </div>
                         )}
+                    </div>
+
+                    {/* Editor Area */}
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        <TabManager
+                            tabs={tabs}
+                            activeTabId={activeTabId}
+                            onTabChange={setActiveTabId}
+                            onTabClose={handleTabClose}
+                            onTabSave={handleTabSave}
+                            onCloseAll={() => setTabs([])}
+                            onCloseOthers={(tabId) => setTabs(prev => prev.filter(t => t.id === tabId))}
+                        />
+
+                        <div className="flex-1 overflow-hidden">
+                            {activeTab ? (
+                                <CodeEditor
+                                    value={activeTab.content}
+                                    language={activeTab.language}
+                                    onChange={handleEditorChange}
+                                    onSave={(value) => {
+                                        if (activeTab) {
+                                            saveFileMutation.mutate({
+                                                path: activeTab.path,
+                                                content: value,
+                                                sha: activeTab.sha, // Pass SHA for update
+                                            });
+                                        }
+                                    }}
+                                />
+                            ) : (
+                                <div className="flex items-center justify-center h-full text-muted-foreground">
+                                    <p>Select a file to start editing</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
         </>
     );
 }

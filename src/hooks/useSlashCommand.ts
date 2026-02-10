@@ -59,6 +59,7 @@ export const useSlashCommand = ({
                 keywords: ['text', 'paragraph', 'p'],
                 category: 'basic',
                 action: () => onCommand({ id: 'text' } as SlashCommand, blockId),
+                shortcut: 'Ctrl+Alt+0',
             },
             // Headings
             {
@@ -69,6 +70,7 @@ export const useSlashCommand = ({
                 keywords: ['heading', 'h1', 'title'],
                 category: 'text',
                 action: () => onCommand({ id: 'heading1' } as SlashCommand, blockId),
+                shortcut: 'Ctrl+Alt+1',
             },
             {
                 id: 'heading2',
@@ -78,6 +80,7 @@ export const useSlashCommand = ({
                 keywords: ['heading', 'h2', 'subtitle'],
                 category: 'text',
                 action: () => onCommand({ id: 'heading2' } as SlashCommand, blockId),
+                shortcut: 'Ctrl+Alt+2',
             },
             {
                 id: 'heading3',
@@ -87,6 +90,7 @@ export const useSlashCommand = ({
                 keywords: ['heading', 'h3'],
                 category: 'text',
                 action: () => onCommand({ id: 'heading3' } as SlashCommand, blockId),
+                shortcut: 'Ctrl+Alt+3',
             },
             // Page
             {
@@ -107,6 +111,7 @@ export const useSlashCommand = ({
                 keywords: ['list', 'bullet', 'ul'],
                 category: 'list',
                 action: () => onCommand({ id: 'bulleted-list' } as SlashCommand, blockId),
+                shortcut: 'Ctrl+Alt+5',
             },
             {
                 id: 'numbered-list',
@@ -116,6 +121,7 @@ export const useSlashCommand = ({
                 keywords: ['list', 'number', 'ol', 'ordered'],
                 category: 'list',
                 action: () => onCommand({ id: 'numbered-list' } as SlashCommand, blockId),
+                shortcut: 'Ctrl+Alt+6',
             },
             {
                 id: 'todo',
@@ -125,6 +131,7 @@ export const useSlashCommand = ({
                 keywords: ['todo', 'task', 'checkbox', 'check'],
                 category: 'list',
                 action: () => onCommand({ id: 'todo' } as SlashCommand, blockId),
+                shortcut: 'Ctrl+Alt+4',
             },
             {
                 id: 'toggle',
@@ -134,6 +141,7 @@ export const useSlashCommand = ({
                 keywords: ['toggle', 'collapse', 'accordion'],
                 category: 'list',
                 action: () => onCommand({ id: 'toggle' } as SlashCommand, blockId),
+                shortcut: 'Ctrl+Alt+7',
             },
             // Media
             {
@@ -171,6 +179,7 @@ export const useSlashCommand = ({
                 keywords: ['code', 'snippet', 'programming'],
                 category: 'media',
                 action: () => onCommand({ id: 'code' } as SlashCommand, blockId),
+                shortcut: 'Ctrl+Alt+8',
             },
             {
                 id: 'quote',
@@ -180,6 +189,7 @@ export const useSlashCommand = ({
                 keywords: ['quote', 'blockquote', 'citation'],
                 category: 'advanced',
                 action: () => onCommand({ id: 'quote' } as SlashCommand, blockId),
+                shortcut: 'Ctrl+Alt+9',
             },
             {
                 id: 'callout',

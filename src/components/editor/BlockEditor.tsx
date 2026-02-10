@@ -2,7 +2,7 @@ import { Block, BlockType, Comment } from "@/types/editor.types";
 // Re-export types for backward compatibility
 export type { Block, BlockType, Comment } from "@/types/editor.types";
 import { SyncedBlock } from "./SyncedBlock";
-import { useState, useCallback, useRef, KeyboardEvent, useEffect } from "react";
+import React, { useState, useCallback, useRef, KeyboardEvent, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Table, AlertCircle, Lightbulb, GripVertical, Plus, Trash2,
@@ -142,7 +142,7 @@ interface BlockItemContentProps {
   readOnly?: boolean;
   isDragging?: boolean;
   dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
-  dropSide?: "left" | "right" | "top" | "bottom" | null;
+  dropSide?: "left" | "right" | "top" | "bottom" | "inside" | null;
   isDragOver?: boolean;
   // State handlers needed for recursive calls
   activeBlockId: string | null;
@@ -180,7 +180,7 @@ interface SortableBlockItemProps {
   isActive: boolean;
   onFocus: () => void;
   readOnly?: boolean;
-  dropSide?: "left" | "right" | null;
+  dropSide?: "top" | "bottom" | "left" | "right" | "inside" | null;
   isDragOver?: boolean;
   // Selection state
   isSelected?: boolean;
@@ -207,7 +207,7 @@ interface SortableBlockItemProps {
   handleInput?: (id: string, e: React.FormEvent<HTMLElement>) => void;
 }
 
-function SortableBlockItem(props: SortableBlockItemProps) {
+const SortableBlockItem = React.forwardRef<HTMLDivElement, SortableBlockItemProps>((props, ref) => {
   const {
     block, isActive, onFocus, readOnly, isDragOver, dropSide, isSelected,
     onChange, onDelete, onAddAfter, onDuplicate, onTurnInto, onCopyLink, onKeyDown, onPaste,
@@ -232,6 +232,15 @@ function SortableBlockItem(props: SortableBlockItemProps) {
     opacity: isSorting ? 0.5 : 1,
   };
 
+  const setRef = useCallback((node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    if (typeof ref === 'function') {
+      ref(node);
+    } else if (ref) {
+      (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    }
+  }, [setNodeRef, ref]);
+
   const handleClick = (e: React.MouseEvent) => {
     // Handle multi-selection
     if (onToggleSelection && (e.ctrlKey || e.metaKey || e.shiftKey)) {
@@ -245,7 +254,7 @@ function SortableBlockItem(props: SortableBlockItemProps) {
 
   return (
     <div
-      ref={setNodeRef}
+      ref={setRef}
       style={style}
       id={`block-${block.id}`}
       onClick={handleClick}
@@ -271,7 +280,8 @@ function SortableBlockItem(props: SortableBlockItemProps) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-primary/10 pl-4 hover:border-primary/30 transition-colors overflow-hidden"
+            className="ml-6 mt-1 flex flex-col gap-1 border-l-2 border-primary/10 pl-4 hover:border-primary/30 transition-colors overflow-hidden min-w-0 flex-shrink-0"
+            style={{ minWidth: '100px' }}
           >
             <SortableContext items={block.children.map(b => b.id)} strategy={verticalListSortingStrategy}>
               {block.children.map((childBlock) => (
@@ -299,7 +309,8 @@ function SortableBlockItem(props: SortableBlockItemProps) {
       </AnimatePresence>
     </div>
   );
-}
+});
+SortableBlockItem.displayName = "SortableBlockItem";
 
 function BlockItemContent({
   block,
@@ -1116,6 +1127,9 @@ function BlockItemContent({
         {isDragOver && dropSide === "bottom" && (
           <div className="absolute left-0 right-0 -bottom-0.5 h-[2px] bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.6)] z-[101] rounded-full" />
         )}
+        {isDragOver && dropSide === "inside" && (
+          <div className="absolute inset-0 bg-primary/10 border-2 border-primary/30 rounded-lg z-[101] pointer-events-none" />
+        )}
 
         {/* Block Handles - Left Side */}
         <div className={cn(
@@ -1175,7 +1189,7 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [selectedMenuIndex, setSelectedMenuIndex] = useState(0);
   const [dragActiveId, setDragActiveId] = useState<string | null>(null);
-  const [dropSide, setDropSide] = useState<"left" | "right" | null>(null);
+  const [dropSide, setDropSide] = useState<"top" | "bottom" | "left" | "right" | "inside" | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [contextMenuOpen, setContextMenuOpen] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1822,6 +1836,12 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
 
     // Also trigger slash menu on "/" when block is empty
     if (e.key === "/" && currentText === "" && !slashMenuOpen) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Manually update content since we prevented default
+      updateBlock(blockId, { content: "/" });
+
       setSlashMenuOpen(true);
       setSlashSearchTerm("");
       setSelectedMenuIndex(0);
@@ -2386,29 +2406,81 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
   };
 
   const handleDragOver = (event: DragOverEvent) => {
-    const { over, activatorEvent } = event;
-    if (over) {
+    const { over, activatorEvent, active } = event;
+    if (over && active.id !== over.id) {
       setDragOverId(over.id as string);
-      // Logic to detect side of drop
       const overElement = document.getElementById(`block-${over.id}`);
       if (overElement) {
         const rect = overElement.getBoundingClientRect();
-        const mouseX = (activatorEvent as MouseEvent).clientX;
+        const eventMouse = activatorEvent as MouseEvent;
+        const mouseX = eventMouse.clientX;
+        const mouseY = eventMouse.clientY;
         const relativeX = mouseX - rect.left;
-        const threshold = rect.width * 0.25;
+        const relativeY = mouseY - rect.top;
 
-        if (relativeX < threshold) {
-          setDropSide("left");
-        } else if (relativeX > rect.width - threshold) {
-          setDropSide("right");
+        const thresholdY = rect.height * 0.25; // 25% for top/bottom detection
+        const thresholdX = 40; // 40px left indentation for nesting
+
+        if (relativeY > thresholdY && relativeY < (rect.height - thresholdY) && relativeX > thresholdX) {
+          setDropSide("inside");
+        } else if (relativeY < rect.height / 2) {
+          setDropSide("top");
         } else {
-          setDropSide(null);
+          setDropSide("bottom");
         }
       }
     } else {
       setDragOverId(null);
       setDropSide(null);
     }
+  };
+
+  const traverseAndRemove = (nodes: Block[], id: string): { nodes: Block[], removed: Block | null } => {
+    let removedBlock: Block | null = null;
+    const newNodes = nodes.filter(node => {
+      if (node.id === id) {
+        removedBlock = node;
+        return false;
+      }
+      if (node.children) {
+        const result = traverseAndRemove(node.children, id);
+        node.children = result.nodes;
+        if (result.removed) removedBlock = result.removed;
+      }
+      return true;
+    });
+    return { nodes: newNodes, removed: removedBlock };
+  };
+
+  const traverseAndInsert = (nodes: Block[], targetId: string, blockToInsert: Block, position: 'top' | 'bottom' | 'inside'): Block[] => {
+    let newNodes: Block[] = [];
+    for (const node of nodes) {
+      if (node.id === targetId) {
+        if (position === 'top') {
+          newNodes.push(blockToInsert);
+          newNodes.push(node);
+        } else if (position === 'bottom') {
+          newNodes.push(node);
+          newNodes.push(blockToInsert);
+        } else if (position === 'inside') {
+          newNodes.push({
+            ...node,
+            children: [...(node.children || []), blockToInsert],
+            isOpen: true
+          });
+        }
+      } else {
+        if (node.children) {
+          newNodes.push({
+            ...node,
+            children: traverseAndInsert(node.children, targetId, blockToInsert, position)
+          });
+        } else {
+          newNodes.push(node);
+        }
+      }
+    }
+    return newNodes;
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -2420,30 +2492,36 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
     setDropSide(null);
 
     if (over && active.id !== over.id) {
-      const activeIdx = blocks.findIndex(b => b.id === active.id);
-      const overIdx = blocks.findIndex(b => b.id === over.id);
-      const activeBlockData = blocks[activeIdx];
-      const overBlockData = blocks[overIdx];
-
-      if (finalDropSide) {
+      if (finalDropSide === 'inside' || finalDropSide === 'top' || finalDropSide === 'bottom') {
+        const { nodes: cleanedBlocks, removed } = traverseAndRemove(blocks, active.id as string);
+        if (removed) {
+          const newBlocks = traverseAndInsert(cleanedBlocks, over.id as string, removed, finalDropSide as 'top' | 'bottom' | 'inside');
+          onChange(newBlocks);
+        }
+      } else if (finalDropSide === 'left' || finalDropSide === 'right') {
         // Dynamic Column Creation
-        const newBlocks = blocks.filter(b => b.id !== active.id);
-        const updatedOverIdx = newBlocks.findIndex(b => b.id === over.id);
-
-        const columnedBlock: Block = {
-          id: generateId(),
-          type: "columns2",
-          content: "",
-          columns: finalDropSide === "left"
-            ? [[activeBlockData], [overBlockData]]
-            : [[overBlockData], [activeBlockData]]
-        };
-
-        newBlocks[updatedOverIdx] = columnedBlock;
-        onChange(newBlocks);
-      } else {
-        // Vertical sorting
-        onChange(arrayMove(blocks, activeIdx, overIdx));
+        const { nodes: cleanedBlocks, removed } = traverseAndRemove(blocks, active.id as string);
+        if (removed) {
+          const insertAsColumns = (nodes: Block[]): Block[] => {
+            return nodes.map(node => {
+              if (node.id === over.id) {
+                return {
+                  id: generateId(),
+                  type: "columns2",
+                  content: "",
+                  columns: finalDropSide === "left"
+                    ? [[removed], [node]]
+                    : [[node], [removed]]
+                };
+              }
+              if (node.children) {
+                return { ...node, children: insertAsColumns(node.children) };
+              }
+              return node;
+            });
+          };
+          onChange(insertAsColumns(cleanedBlocks));
+        }
       }
     }
   };

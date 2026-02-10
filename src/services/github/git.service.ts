@@ -232,7 +232,7 @@ export async function updateFile(
             sha, // If sha is provided, it updates; otherwise creates
         });
 
-        return data.commit;
+        return data;
     });
 }
 

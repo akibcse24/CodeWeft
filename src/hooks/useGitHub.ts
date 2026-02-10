@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, safeInvoke } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { logger } from "@/lib/logger";
 
@@ -85,10 +85,11 @@ export function useGitHub() {
         if (!settings?.github_token || settings.github_token !== session.provider_token) {
           try {
             logger.info("Syncing GitHub token from session...");
-            const { data } = await supabase.functions.invoke("github-api?action=test", {
+            const { data: rawData, error } = await safeInvoke("github-api?action=test", {
               body: { token: session.provider_token },
               method: "POST",
             });
+            const data = rawData as TestConnectionResult;
 
             if (data?.valid) {
               await supabase
@@ -96,8 +97,8 @@ export function useGitHub() {
                 .upsert({
                   user_id: user.id,
                   github_token: session.provider_token,
-                  github_username: data.user.login,
-                  avatar_url: data.user.avatar_url,
+                  github_username: data.user?.login,
+                  avatar_url: data.user?.avatar_url,
                   updated_at: new Date().toISOString(),
                 });
 
@@ -202,22 +203,16 @@ export function useGitHub() {
   } = useQuery({
     queryKey: ["github-contributions", user?.id],
     queryFn: async (): Promise<ContributionData | null> => {
-      const { data, error } = await supabase.functions.invoke("github-api", {
+      const { data, error } = await safeInvoke("github-api?action=contributions", {
         method: "POST",
         body: {},
       });
 
-      // Need to use GET with query params
-      const response = await supabase.functions.invoke("github-api?action=contributions", {
-        method: "POST",
-        body: {},
-      });
-
-      if (response.error) {
-        logger.error("Contributions error:", response.error);
+      if (error) {
+        logger.error("Contributions error:", error);
         return null;
       }
-      return response.data;
+      return data as ContributionData;
     },
     enabled: !!settings?.github_token && !!settings?.github_username,
   });
@@ -230,16 +225,38 @@ export function useGitHub() {
   } = useQuery({
     queryKey: ["github-events", user?.id],
     queryFn: async (): Promise<GitHubEvent[] | null> => {
-      const response = await supabase.functions.invoke("github-api?action=events", {
+      const { data, error } = await safeInvoke("github-api?action=events", {
         method: "POST",
         body: {},
       });
 
-      if (response.error) {
-        logger.error("Events error:", response.error);
+      if (error) {
+        logger.error("Events error:", error);
         return null;
       }
-      return response.data;
+      return data as GitHubEvent[];
+    },
+    enabled: !!settings?.github_token && !!settings?.github_username,
+  });
+
+  // Fetch all repositories
+  const {
+    data: repositories,
+    isLoading: repositoriesLoading,
+    refetch: refetchRepositories,
+  } = useQuery({
+    queryKey: ["github-repositories", user?.id],
+    queryFn: async (): Promise<any[] | null> => {
+      const { data, error } = await safeInvoke("github-api?action=repos", {
+        method: "POST",
+        body: {},
+      });
+
+      if (error) {
+        logger.error("Repositories error:", error);
+        return null;
+      }
+      return data as any[];
     },
     enabled: !!settings?.github_token && !!settings?.github_username,
   });
@@ -260,6 +277,9 @@ export function useGitHub() {
     events,
     eventsLoading,
     refetchEvents,
+    repositories,
+    repositoriesLoading,
+    refetchRepositories,
   };
 }
 
@@ -288,13 +308,13 @@ export function useGitHubRepo(githubUrl: string | null | undefined) {
     queryFn: async () => {
       if (!parsed) return null;
 
-      const response = await supabase.functions.invoke(
+      const { data, error } = await safeInvoke(
         `github-api?action=repo&owner=${parsed.owner}&repo=${parsed.repo}`,
         { method: "POST", body: {} }
       );
 
-      if (response.error) throw response.error;
-      return response.data;
+      if (error) throw error;
+      return data;
     },
     enabled: !!parsed && !!user,
   });
@@ -309,13 +329,13 @@ export function useGitHubRepo(githubUrl: string | null | undefined) {
     queryFn: async () => {
       if (!parsed) return null;
 
-      const response = await supabase.functions.invoke(
+      const { data, error } = await safeInvoke(
         `github-api?action=commits&owner=${parsed.owner}&repo=${parsed.repo}&limit=5`,
         { method: "POST", body: {} }
       );
 
-      if (response.error) throw response.error;
-      return response.data;
+      if (error) throw error;
+      return data;
     },
     enabled: !!parsed && !!user,
   });
@@ -342,13 +362,13 @@ export function useGitHubSolutions() {
         ? `github-api?action=solutions&repo=${encodeURIComponent(repo)}`
         : "github-api?action=solutions";
 
-      const response = await supabase.functions.invoke(url, {
+      const { data, error } = await safeInvoke(url, {
         method: "POST",
         body: {},
       });
 
-      if (response.error) throw response.error;
-      return response.data as {
+      if (error) throw error;
+      return data as {
         solutions: Array<{
           path: string;
           name: string;

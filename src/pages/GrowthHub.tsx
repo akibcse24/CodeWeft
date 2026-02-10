@@ -1,138 +1,85 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-    TrendingUp,
+    Sparkles,
+    FastForward,
     Map,
     Target,
-    Github,
     History,
+    Github,
     Plus,
-    CheckCircle2,
-    Circle,
-    Award,
-    FastForward,
+    PlusCircle,
+    FastForward as FastForwardIcon,
+    ArrowUpRight,
     Star,
-    Sparkles,
-    GitPullRequest,
-    Coffee,
-    Trophy,
-    ArrowUpRight
+    GitBranch,
+    Zap,
+    Book,
+    Trash2,
+    TrendingUp,
+    History as HistoryIcon,
+    Dna
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-
-// Persistence Hook
-function useStickyState<T>(defaultValue: T, key: string): [T, React.Dispatch<React.SetStateAction<T>>] {
-    const [value, setValue] = useState<T>(() => {
-        try {
-            const stickyValue = window.localStorage.getItem(key);
-            return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
-        } catch (error) {
-            console.warn(`Error parsing localStorage key "${key}":`, error);
-            return defaultValue;
-        }
-    });
-
-    useEffect(() => {
-        try {
-            window.localStorage.setItem(key, JSON.stringify(value));
-        } catch (error) {
-            console.warn(`Error saving to localStorage key "${key}":`, error);
-        }
-    }, [key, value]);
-
-    return [value, setValue];
-}
-
-
-interface RoadmapItem {
-    id: string;
-    title: string;
-    description: string;
-    color: string;
-    progress: number;
-    milestones: boolean[];
-}
-
-interface SkillItem {
-    name: string;
-    level: number;
-    category: string;
-}
-
-const INITIAL_ROADMAPS: RoadmapItem[] = [];
-
-const INITIAL_SKILLS: SkillItem[] = [];
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useGrowth, RoadmapItem, SkillItem } from "@/hooks/useGrowth";
+import { useGitHub } from "@/hooks/useGitHub";
+import { cn } from "@/lib/utils";
 
 export default function GrowthHub() {
-    const { toast } = useToast();
+    const {
+        roadmaps,
+        roadmapsLoading,
+        addRoadmap,
+        advanceMilestone,
+        removeRoadmap,
+        skills,
+        skillsLoading,
+        addSkill,
+        levelUpSkill,
+        removeSkill,
+        retros,
+        retrosLoading,
+        addRetro,
+        removeRetro
+    } = useGrowth();
+
+    const { contributions, repositories } = useGitHub();
+
     const [activeTab, setActiveTab] = useState("roadmap");
-
-    // Persisted Logic
-    const [roadmaps, setRoadmaps] = useStickyState<RoadmapItem[]>(INITIAL_ROADMAPS, "growth-roadmaps");
-    const [skills, setSkills] = useStickyState<SkillItem[]>(INITIAL_SKILLS, "growth-skills");
-    const [retros, setRetros] = useStickyState<{ date: string, content: string, takeaway: string }[]>([], "growth-retros");
-
-    // Form states
     const [retroInput, setRetroInput] = useState("");
     const [takeawayInput, setTakeawayInput] = useState("");
     const [newSkillName, setNewSkillName] = useState("");
 
-    const handleSaveRetro = () => {
+    // New Roadmap form state
+    const [showRoadmapForm, setShowRoadmapForm] = useState(false);
+    const [newRoadmapTitle, setNewRoadmapTitle] = useState("");
+    const [newRoadmapDesc, setNewRoadmapDesc] = useState("");
+
+    const handleSaveRetro = async () => {
         if (!retroInput) return;
-        const newEntry = {
-            date: new Date().toLocaleDateString(),
+        await addRetro.mutateAsync({
             content: retroInput,
             takeaway: takeawayInput || "No key takeaway logged."
-        };
-        setRetros([newEntry, ...retros]);
+        });
         setRetroInput("");
         setTakeawayInput("");
-        toast({ title: "Reflection Captured", description: "Your evolution has been recorded." });
     };
 
-    const advanceMilestone = (roadmapId: string) => {
-        const updated = roadmaps.map(r => {
-            if (r.id !== roadmapId) return r;
-            const nextIndex = r.milestones.findIndex(m => !m);
-            if (nextIndex === -1) return r;
-
-            const newMilestones = [...r.milestones];
-            newMilestones[nextIndex] = true;
-            const newProgress = Math.round(((nextIndex + 1) / r.milestones.length) * 100);
-
-            toast({
-                title: "Level Up!",
-                description: `You've conquered a new milestone in ${r.title}.`
-            });
-            return { ...r, milestones: newMilestones, progress: newProgress };
+    const handleCreateRoadmap = async () => {
+        if (!newRoadmapTitle) return;
+        await addRoadmap.mutateAsync({
+            title: newRoadmapTitle,
+            description: newRoadmapDesc,
+            milestonesCount: 3
         });
-        setRoadmaps(updated);
-    };
-
-    const levelUpSkill = (skillName: string) => {
-        setSkills(skills.map(s => {
-            if (s.name === skillName && s.level < 10) {
-                toast({ title: "Mastery Increased", description: `${s.name} specialized knowledge expanded.` });
-                return { ...s, level: s.level + 1 };
-            }
-            return s;
-        }));
-    };
-
-    const addSkill = () => {
-        if (!newSkillName) return;
-        setSkills([...skills, { name: newSkillName, level: 1, category: "Core" }]);
-        setNewSkillName("");
-        toast({ title: "New Skill Initiated", description: `${newSkillName} added to your matrix.` });
+        setNewRoadmapTitle("");
+        setNewRoadmapDesc("");
+        setShowRoadmapForm(false);
     };
 
     return (
@@ -162,7 +109,7 @@ export default function GrowthHub() {
                         <div className="flex flex-col">
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-1">Mastery Points</span>
                             <span className="text-3xl font-black text-indigo-400 leading-none">
-                                {skills.reduce((acc, s) => acc + s.level, 0)}
+                                {skills.reduce((acc, s) => acc + (s.level || 0), 0)}
                             </span>
                         </div>
                     </div>
@@ -196,260 +143,377 @@ export default function GrowthHub() {
                         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                     >
                         <TabsContent value="roadmap" className="mt-0">
-                            {roadmaps.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-32 bg-dot-pattern rounded-[3rem] border-2 border-dashed border-border/40">
-                                    <div className="w-24 h-24 bg-primary/5 rounded-full flex items-center justify-center mb-8 animate-pulse">
-                                        <Map className="w-12 h-12 text-primary/40" />
+                            {roadmaps.length === 0 && !showRoadmapForm ? (
+                                <div className="flex flex-col items-center justify-center py-40 bg-muted/10 rounded-[3rem] border-2 border-dashed border-border/40 text-center px-6">
+                                    <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-8">
+                                        <Map className="h-10 w-10 text-primary" />
                                     </div>
-                                    <h3 className="text-2xl font-black mb-3">No active roadmaps found</h3>
-                                    <p className="text-muted-foreground mb-8 text-lg">Initiate a new growth vector from the Project Architect.</p>
-                                    <Button size="lg" className="rounded-2xl h-14 px-8 font-black gap-3" onClick={() => setActiveTab("matrix")}>
-                                        <Plus className="h-5 w-5" /> Start Learning Path
+                                    <h3 className="text-2xl font-black mb-4 uppercase tracking-tighter italic">No Active Trajectories</h3>
+                                    <p className="text-muted-foreground text-lg mb-10 max-w-sm font-medium leading-relaxed italic">
+                                        You haven't initiated an evolution roadmap. Architect your growth path.
+                                    </p>
+                                    <Button size="lg" className="rounded-2xl h-16 px-12 font-black text-lg gap-3 shadow-2xl shadow-primary/20" onClick={() => setShowRoadmapForm(true)}>
+                                        Initiate Protocol <Plus className="h-6 w-6" />
                                     </Button>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                    {roadmaps.map((roadmap) => (
-                                        <Card key={roadmap.id} className="group relative overflow-hidden glass-premium border-border/30 hover:border-primary/40 transition-all duration-500">
-                                            <div className="absolute top-0 right-0 w-48 h-48 bg-primary/5 rounded-full blur-[64px] -mr-24 -mt-24 group-hover:bg-primary/10 transition-colors" />
-                                            <CardHeader className="relative z-10 space-y-4">
-                                                <div className="flex items-center justify-between">
-                                                    <Badge variant="secondary" className={cn("text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-lg bg-muted/60", roadmap.color)}>
-                                                        {roadmap.progress === 100 ? "Architected" : "In Focus"}
-                                                    </Badge>
-                                                    {roadmap.progress === 100 && <Trophy className="h-6 w-6 text-yellow-500" />}
-                                                </div>
-                                                <div className="space-y-1">
-                                                    <CardTitle className="text-2xl font-black group-hover:text-primary transition-colors">{roadmap.title}</CardTitle>
-                                                    <CardDescription className="text-sm font-medium leading-relaxed line-clamp-2 italic">{roadmap.description}</CardDescription>
-                                                </div>
-                                            </CardHeader>
-                                            <CardContent className="relative z-10 space-y-8">
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-end">
-                                                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Completion Density</span>
-                                                        <span className="text-xl font-black">{roadmap.progress}%</span>
-                                                    </div>
-                                                    <Progress value={roadmap.progress} className="h-3 bg-muted/30" />
-                                                </div>
-
-                                                <div className="space-y-4 bg-muted/20 p-4 rounded-2xl border border-border/40">
-                                                    {roadmap.milestones.map((completed, i) => (
-                                                        <div key={i} className="flex items-center gap-3">
-                                                            <div className={cn(
-                                                                "w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border transition-all",
-                                                                completed ? "bg-emerald-500/10 border-emerald-500/20" : "bg-muted/40 border-transparent"
-                                                            )}>
-                                                                {completed ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />}
-                                                            </div>
-                                                            <span className={cn(
-                                                                "text-[11px] font-black uppercase tracking-widest",
-                                                                completed ? "text-muted-foreground line-through opacity-40" : "text-foreground"
-                                                            )}>
-                                                                Milestone Phase {i + 1}
-                                                            </span>
+                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                                    <AnimatePresence>
+                                        {showRoadmapForm && (
+                                            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
+                                                <Card className="glass-premium border-primary/20 h-full">
+                                                    <CardHeader className="p-10 pb-6">
+                                                        <CardTitle className="text-3xl font-black tracking-tighter">New Trajectory</CardTitle>
+                                                        <CardDescription>Define the scope of your engineering ascent.</CardDescription>
+                                                    </CardHeader>
+                                                    <CardContent className="p-10 pt-0 space-y-6">
+                                                        <Input placeholder="Roadmap Title (e.g. Distributed Systems Mastery)" value={newRoadmapTitle} onChange={e => setNewRoadmapTitle(e.target.value)} className="h-14 rounded-xl bg-muted/20" />
+                                                        <Textarea placeholder="Description of the path..." value={newRoadmapDesc} onChange={e => setNewRoadmapDesc(e.target.value)} className="min-h-[120px] rounded-xl bg-muted/20" />
+                                                        <div className="flex gap-4">
+                                                            <Button className="flex-1 h-16 rounded-2xl font-black text-lg" onClick={handleCreateRoadmap} disabled={addRoadmap.isPending}>
+                                                                Initiate Path
+                                                            </Button>
+                                                            <Button variant="ghost" className="h-16 px-8 rounded-2xl font-black" onClick={() => setShowRoadmapForm(false)}>Cancel</Button>
                                                         </div>
-                                                    ))}
-                                                </div>
+                                                    </CardContent>
+                                                </Card>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
 
-                                                <Button
-                                                    className="w-full h-14 rounded-2xl font-black shadow-xl shadow-primary/5 hover:shadow-primary/10 hover:scale-[1.02] transition-all gap-3 bg-primary text-primary-foreground border-none"
-                                                    onClick={() => advanceMilestone(roadmap.id)}
-                                                    disabled={roadmap.progress === 100}
-                                                >
-                                                    {roadmap.progress === 100 ? "Zenith Reached" : "Advance Pipeline"} <FastForward className="h-5 w-5" />
-                                                </Button>
-                                            </CardContent>
-                                        </Card>
+                                    {roadmaps.map((roadmap) => (
+                                        <motion.div
+                                            layout
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            key={roadmap.id}
+                                        >
+                                            <Card className="group glass-premium border-border/30 hover:border-primary/40 transition-all duration-700 relative overflow-hidden h-full flex flex-col">
+                                                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-[100px] -mr-32 -mt-32 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                <CardHeader className="p-10 pb-6 relative z-10">
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <Badge variant="outline" className="px-4 py-1.5 rounded-full border-primary/20 bg-primary/5 text-primary text-[10px] font-black uppercase tracking-[0.2em]">
+                                                            Level {Math.floor((roadmap.progress || 0) / 33) + 1} Architect
+                                                        </Badge>
+                                                        <div className="flex gap-2">
+                                                            <Button variant="ghost" size="icon" className="h-10 w-10 text-muted-foreground/40 hover:text-destructive transition-colors" onClick={() => removeRoadmap.mutate(roadmap.id)}>
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                    <CardTitle className="text-4xl font-black tracking-tighter leading-none mb-4 italic group-hover:text-primary transition-colors">{roadmap.title}</CardTitle>
+                                                    <CardDescription className="text-lg leading-relaxed font-medium line-clamp-2 italic">{roadmap.description}</CardDescription>
+                                                </CardHeader>
+                                                <CardContent className="p-10 pt-0 flex-1 flex flex-col justify-between space-y-10 relative z-10">
+                                                    <div className="space-y-6">
+                                                        <div className="flex justify-between items-end">
+                                                            <div className="space-y-1">
+                                                                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Current Progress</span>
+                                                                <p className="text-4xl font-black leading-none italic">{roadmap.progress}%</p>
+                                                            </div>
+                                                            <div className="text-right space-y-1">
+                                                                <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Milestones</span>
+                                                                <div className="flex gap-1.5">
+                                                                    {roadmap.milestones?.map((m, i) => (
+                                                                        <div key={i} className={cn("w-3 h-3 rounded-full transition-all duration-500", m ? "bg-primary shadow-[0_0_12px_rgba(255,42,109,0.5)] scale-110" : "bg-muted/30 border border-border/40")} />
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="h-4 w-full bg-muted/20 rounded-full overflow-hidden border border-border/20 p-1">
+                                                            <motion.div
+                                                                className="h-full bg-primary rounded-full shadow-[0_0_20px_rgba(255,42,109,0.3)]"
+                                                                initial={{ width: 0 }}
+                                                                animate={{ width: `${roadmap.progress}%` }}
+                                                                transition={{ duration: 1.5, ease: "circOut" }}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <Button
+                                                        className="w-full h-14 rounded-2xl font-black shadow-xl shadow-primary/5 hover:shadow-primary/10 hover:scale-[1.02] transition-all gap-3 bg-primary text-primary-foreground border-none"
+                                                        onClick={() => advanceMilestone.mutate({ id: roadmap.id, milestones: roadmap.milestones })}
+                                                        disabled={roadmap.progress === 100 || advanceMilestone.isPending}
+                                                    >
+                                                        {roadmap.progress === 100 ? "Zenith Reached" : "Advance Pipeline"} <FastForwardIcon className="h-5 w-5" />
+                                                    </Button>
+                                                </CardContent>
+                                            </Card>
+                                        </motion.div>
                                     ))}
+
+                                    {roadmaps.length > 0 && !showRoadmapForm && (
+                                        <Button variant="outline" className="h-full min-h-[400px] border-2 border-dashed border-border/40 rounded-[3rem] text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all flex flex-col gap-6" onClick={() => setShowRoadmapForm(true)}>
+                                            <PlusCircle className="h-16 w-16 opacity-20" />
+                                            <span className="font-black uppercase tracking-widest italic">Initiate New Trajectory</span>
+                                        </Button>
+                                    )}
                                 </div>
                             )}
                         </TabsContent>
 
                         <TabsContent value="matrix" className="mt-0">
-                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                                <div className="lg:col-span-8 flex flex-col gap-8">
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 py-10">
+                                <div className="lg:col-span-8">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         {skills.map(skill => (
                                             <motion.div
                                                 whileHover={{ y: -5, scale: 1.02 }}
-                                                key={skill.name}
+                                                key={skill.id}
                                                 className="group relative cursor-pointer"
-                                                onClick={() => levelUpSkill(skill.name)}
+                                                onClick={() => levelUpSkill.mutate({ id: skill.id, level: skill.level })}
                                             >
                                                 <Card className="h-full glass-premium border-border/30 group-hover:border-primary/40 transition-all duration-300 relative overflow-hidden">
                                                     <div className="absolute inset-0 bg-gradient-to-tr from-primary/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                    <CardContent className="p-6 flex flex-col items-center gap-4 text-center">
-                                                        <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">{skill.category}</span>
-                                                        <span className="text-xl font-black group-hover:text-primary transition-colors">{skill.name}</span>
-                                                        <div className="flex gap-1 py-1">
-                                                            {[...Array(5)].map((_, i) => {
-                                                                const fill = i < Math.ceil(skill.level / 2);
-                                                                return <Star key={i} className={cn("h-4 w-4 transition-colors", fill ? "fill-primary text-primary" : "text-muted/40")} />;
-                                                            })}
+                                                    <CardContent className="p-8">
+                                                        <div className="flex items-start justify-between mb-8">
+                                                            <div className="space-y-1">
+                                                                <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest border-primary/20 text-primary px-2 mb-2">
+                                                                    {skill.category}
+                                                                </Badge>
+                                                                <h4 className="text-2xl font-black italic tracking-tighter group-hover:text-primary transition-colors">{skill.name}</h4>
+                                                            </div>
+                                                            <div className="w-12 h-12 bg-muted/20 rounded-xl flex items-center justify-center font-black text-xl italic group-hover:scale-110 transition-transform">
+                                                                {skill.level}
+                                                            </div>
                                                         </div>
-                                                        <div className="w-full h-1.5 bg-muted/40 rounded-full overflow-hidden mt-2">
-                                                            <div className="h-full bg-primary transition-all duration-500" style={{ width: `${(skill.level / 10) * 100}%` }} />
+                                                        <div className="flex gap-1 h-3">
+                                                            {[...Array(10)].map((_, i) => (
+                                                                <div
+                                                                    key={i}
+                                                                    className={cn(
+                                                                        "flex-1 rounded-sm transition-all duration-500",
+                                                                        i < (skill.level || 0) ? "bg-primary shadow-[0_0_8px_rgba(255,42,109,0.4)]" : "bg-muted/20"
+                                                                    )}
+                                                                />
+                                                            ))}
                                                         </div>
-                                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mt-2">Level {skill.level}</span>
+                                                        <div className="flex justify-between mt-3 px-1">
+                                                            <span className="text-[10px] font-black tracking-widest text-muted-foreground/40 uppercase">Initiate</span>
+                                                            <span className="text-[10px] font-black tracking-widest text-primary uppercase">Grandmaster</span>
+                                                        </div>
                                                     </CardContent>
+                                                    <Button variant="ghost" size="icon" className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); removeSkill.mutate(skill.id); }}>
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </Button>
                                                 </Card>
                                             </motion.div>
                                         ))}
-                                        <div className="group border-2 border-dashed border-border/40 rounded-3xl p-6 flex flex-col gap-4 items-center justify-center bg-muted/5 hover:bg-muted/10 transition-colors">
+                                        <div className="glass-premium border-border/40 p-1 rounded-[2.5rem] flex flex-col md:flex-row items-center gap-4">
                                             <Input
-                                                className="bg-transparent border-none text-center font-black text-lg focus-visible:ring-0 placeholder:text-muted-foreground/30"
-                                                placeholder="INIT_SKILL"
+                                                placeholder="Inject New Discipline..."
+                                                className="h-16 bg-transparent border-none text-lg font-bold placeholder:text-muted-foreground/30 focus-visible:ring-0 px-8"
                                                 value={newSkillName}
                                                 onChange={(e) => setNewSkillName(e.target.value)}
-                                                onKeyDown={(e) => e.key === 'Enter' && addSkill()}
+                                                onKeyDown={(e) => e.key === 'Enter' && addSkill.mutate({ name: newSkillName, category: "Core" })}
                                             />
-                                            <Button size="icon" variant="ghost" className="rounded-full w-12 h-12 bg-primary/10 text-primary hover:bg-primary/20" onClick={addSkill}>
+                                            <Button size="icon" variant="ghost" className="rounded-full w-12 h-12 bg-primary/10 text-primary hover:bg-primary/20" onClick={() => addSkill.mutate({ name: newSkillName, category: "Core" })}>
                                                 <Plus className="h-6 w-6" />
                                             </Button>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="lg:col-span-4 space-y-8">
-                                    <Card className="glass-premium border-primary/20 bg-primary/[0.02]">
-                                        <CardHeader>
-                                            <CardTitle className="font-black flex items-center gap-3">
-                                                <Award className="h-6 w-6 text-primary" /> Peak Competencies
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="space-y-8">
-                                            {skills.length === 0 ? (
-                                                <p className="text-center text-sm text-muted-foreground py-10 italic">Your skills matrix is currently dormant.</p>
-                                            ) : (
-                                                skills.sort((a, b) => b.level - a.level).slice(0, 3).map((skill) => (
-                                                    <div key={skill.name} className="space-y-4">
-                                                        <div className="flex justify-between items-center">
-                                                            <h4 className="font-black text-lg leading-none">{skill.name}</h4>
-                                                            <Badge className="bg-primary/10 text-primary border-none rounded-lg px-2 text-[10px] font-black uppercase">Lv. {skill.level}</Badge>
-                                                        </div>
-                                                        <div className="flex gap-1.5 h-4">
-                                                            {[...Array(10)].map((_, i) => (
-                                                                <div
-                                                                    key={i}
-                                                                    className={cn(
-                                                                        "flex-1 rounded-sm transition-all duration-700",
-                                                                        i < skill.level ? "bg-gradient-to-t from-primary to-primary/60 shadow-[0_0_15px_hsla(var(--primary)/0.3)]" : "bg-muted/40"
-                                                                    )}
-                                                                />
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )))}
-                                        </CardContent>
-                                    </Card>
-                                </div>
+                                <Card className="lg:col-span-4 glass-premium border-border/30 p-10 space-y-10 h-fit sticky top-24">
+                                    <div className="space-y-4">
+                                        <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center">
+                                            <TrendingUp className="h-7 w-7 text-emerald-400" />
+                                        </div>
+                                        <h4 className="text-3xl font-black tracking-tighter italic">Engine Optimization</h4>
+                                        <p className="text-muted-foreground font-medium italic leading-relaxed">
+                                            Total Skill Saturation: {skills.reduce((acc, s) => acc + (s.level || 0), 0)} Mastery Points localized.
+                                        </p>
+                                    </div>
+                                    <div className="space-y-6">
+                                        <div className="p-6 rounded-2xl bg-muted/10 border border-border/40 italic">
+                                            <p className="text-sm text-primary font-black mb-2 uppercase tracking-widest">Growth Recommendation</p>
+                                            <p className="text-sm font-medium leading-relaxed">
+                                                Your {skills[0]?.name || "Primary Skill"} is dominant. Consider diversifying into secondary disciplines to reach Architect status.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </Card>
                             </div>
                         </TabsContent>
 
                         <TabsContent value="retro" className="mt-0">
-                            <div className="grid grid-cols-1 xl:grid-cols-12 gap-10 items-start">
-                                <div className="xl:col-span-5">
-                                    <Card className="glass-premium border-primary/20 p-4">
-                                        <CardHeader className="space-y-4">
-                                            <div className="w-16 h-16 rounded-3xl bg-amber-500/10 flex items-center justify-center">
-                                                <Coffee className="h-8 w-8 text-amber-500" />
+                            <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 py-10">
+                                <div className="lg:col-span-12">
+                                    <Card className="glass-premium border-border/30 overflow-hidden mb-12">
+                                        <div className="grid grid-cols-1 md:grid-cols-[1fr,350px]">
+                                            <div className="p-10 space-y-8">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+                                                        <HistoryIcon className="h-6 w-6 text-amber-500" />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-3xl font-black tracking-tighter italic leading-none">Daily Reflection</h4>
+                                                        <p className="text-muted-foreground text-sm font-medium italic mt-1">Archive today's cerebral output.</p>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-6">
+                                                    <div className="space-y-3">
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 px-2">Cerebral Log</label>
+                                                        <Textarea
+                                                            placeholder="What complex paradigms did you navigate today?"
+                                                            className="min-h-[160px] bg-muted/10 border-border/20 rounded-3xl p-8 text-lg font-medium italic placeholder:text-muted-foreground/20 italic"
+                                                            value={retroInput}
+                                                            onChange={(e) => setRetroInput(e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 px-2">Key Synthesized Takeaway</label>
+                                                        <Input
+                                                            placeholder="The singular lesson to archive..."
+                                                            className="h-16 bg-muted/10 border-border/20 rounded-2xl px-8 text-lg font-medium italic"
+                                                            value={takeawayInput}
+                                                            onChange={(e) => setTakeawayInput(e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <Button className="h-18 w-full rounded-2xl text-xl font-black italic shadow-2xl shadow-primary/20 bg-primary text-primary-foreground transform active:scale-95 transition-all" onClick={handleSaveRetro} disabled={addRetro.isPending}>
+                                                        Archive Evolution <Zap className="h-6 w-6 ml-4" />
+                                                    </Button>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <CardTitle className="text-3xl font-black">Daily Reflection</CardTitle>
-                                                <CardDescription className="text-base">Synthesize today's experiences into actionable wisdom.</CardDescription>
+                                            <div className="bg-muted/10 border-l border-border/20 p-10 flex flex-col justify-center gap-10">
+                                                <div className="space-y-4">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary text-center">Protocol Status</p>
+                                                    <div className="flex items-center justify-center gap-3">
+                                                        {[...Array(7)].map((_, i) => (
+                                                            <div key={i} className={cn("w-3 h-3 rounded-full", i < 4 ? "bg-primary" : "bg-muted/40")} />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                                <div className="p-6 rounded-2xl border border-border/40 bg-background/40 italic">
+                                                    <p className="text-xs leading-relaxed text-muted-foreground font-medium">
+                                                        Consistent daily reflection increases synaptic resonance by <span className="text-primary font-black">42%</span>. Your streak is localized to 4 cycles.
+                                                    </p>
+                                                </div>
                                             </div>
-                                        </CardHeader>
-                                        <CardContent className="space-y-8 mt-4">
-                                            <div className="space-y-4">
-                                                <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 ml-1">Hardest Obstacle Countered</Label>
-                                                <Textarea
-                                                    placeholder="e.g. Navigating the complexity of recursive state updates..."
-                                                    className="min-h-[160px] bg-muted/40 border-none rounded-2xl p-6 text-lg placeholder:italic"
-                                                    value={retroInput}
-                                                    onChange={(e) => setRetroInput(e.target.value)}
-                                                />
-                                            </div>
-                                            <div className="space-y-4">
-                                                <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 ml-1">Core Takeaway</Label>
-                                                <Input
-                                                    placeholder="What is the one thing you won't forget?"
-                                                    className="h-16 bg-muted/40 border-none rounded-2xl px-6 text-lg font-bold"
-                                                    value={takeawayInput}
-                                                    onChange={(e) => setTakeawayInput(e.target.value)}
-                                                />
-                                            </div>
-                                            <Button className="w-full h-16 rounded-2xl font-black text-lg shadow-2xl shadow-primary/10" onClick={handleSaveRetro}>
-                                                Archive Reflection
-                                            </Button>
-                                        </CardContent>
+                                        </div>
                                     </Card>
-                                </div>
 
-                                <div className="xl:col-span-7 space-y-6">
-                                    <div className="flex items-center gap-3 px-2">
-                                        <History className="h-5 w-5 text-muted-foreground" />
-                                        <h3 className="font-black text-xs uppercase tracking-[0.3em] text-muted-foreground">Historical Records</h3>
-                                    </div>
-                                    <div className="grid gap-6">
-                                        {retros.length === 0 ? (
-                                            <div className="p-20 text-center bg-muted/10 rounded-[2.5rem] border-2 border-dashed border-border/40">
-                                                <span className="text-muted-foreground italic text-lg">Your chronicle begins with the first save.</span>
-                                            </div>
-                                        ) : (
-                                            retros.map((entry, i) => (
-                                                <Card key={i} className="glass-premium border-border/30 hover:border-primary/20 transition-all group overflow-hidden">
-                                                    <CardContent className="p-8 flex items-start gap-8 relative">
-                                                        <div className="absolute top-0 left-0 w-1 h-full bg-primary/20 group-hover:bg-primary transition-colors" />
-                                                        <div className="text-center min-w-[80px] space-y-1">
-                                                            <span className="text-4xl font-black text-muted-foreground/20 group-hover:text-primary/20 transition-colors uppercase leading-none block">
-                                                                {entry.date.split('/')[1] || entry.date.split('.')[0]}
-                                                            </span>
-                                                            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">{new Date(entry.date).toLocaleString('default', { month: 'short' })}</span>
-                                                        </div>
-                                                        <div className="flex-1 space-y-4">
-                                                            <p className="text-lg font-medium leading-relaxed text-foreground/80 italic">"{entry.content}"</p>
-                                                            <div className="flex items-center gap-3 bg-primary/5 p-4 rounded-xl border border-primary/10">
-                                                                <Sparkles className="h-4 w-4 text-primary" />
-                                                                <p className="text-xs font-black uppercase tracking-widest text-primary">{entry.takeaway}</p>
-                                                            </div>
-                                                        </div>
-                                                    </CardContent>
+                                    <div className="space-y-6">
+                                        <div className="flex items-center gap-3 px-4 uppercase tracking-[0.3em] text-xs font-black text-muted-foreground/60 mb-8">
+                                            <Dna className="h-4 w-4" /> Historical Records
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {retros.map(retro => (
+                                                <Card key={retro.id} className="glass-premium border-border/30 p-8 space-y-6 relative group overflow-hidden">
+                                                    <div className="absolute top-0 right-0 p-4">
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground/20 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => removeRetro.mutate(retro.id)}>
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                    <div className="flex justify-between items-start">
+                                                        <time className="text-[10px] font-black tracking-widest text-primary uppercase">{retro.date}</time>
+                                                    </div>
+                                                    <p className="text-muted-foreground text-sm font-medium leading-relaxed italic line-clamp-3">
+                                                        "{retro.content}"
+                                                    </p>
+                                                    <div className="pt-4 border-t border-border/20">
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mb-2">Synthesis</p>
+                                                        <p className="text-xs font-black italic text-foreground">{retro.takeaway}</p>
+                                                    </div>
                                                 </Card>
-                                            ))
-                                        )}
+                                            ))}
+                                            {retros.length === 0 && (
+                                                <div className="col-span-full py-20 text-center opacity-30 italic font-black uppercase tracking-widest text-xs">
+                                                    No growth records localized in temporal database.
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </TabsContent>
 
                         <TabsContent value="oss" className="mt-0">
-                            <div className="max-w-4xl mx-auto py-20">
-                                <div className="relative group">
-                                    <div className="absolute -inset-1 bg-gradient-to-r from-primary to-indigo-500 rounded-[3rem] blur opacity-25 group-hover:opacity-40 transition duration-1000 group-hover:duration-200" />
-                                    <Card className="relative glass-premium border-none bg-background/60 p-12 text-center overflow-hidden">
-                                        <div className="absolute -right-20 -top-20 w-80 h-80 bg-primary/10 rounded-full blur-[100px] pointer-events-none" />
-                                        <CardContent className="space-y-10">
-                                            <div className="w-24 h-24 mx-auto rounded-[2rem] bg-indigo-500/10 flex items-center justify-center">
-                                                <Github className="h-12 w-12 text-indigo-400" />
-                                            </div>
-                                            <div className="space-y-4">
-                                                <h4 className="text-4xl font-black tracking-tighter italic">Collaborative Synthesis Incoming</h4>
-                                                <p className="text-muted-foreground text-xl max-w-lg mx-auto leading-relaxed">
-                                                    We are architecting a direct neural link to your GitHub profile to visualize your Open Source impact.
-                                                </p>
-                                            </div>
-                                            <div className="flex flex-col sm:flex-row gap-4 items-center justify-center pt-6">
-                                                <Button size="lg" className="h-16 px-12 rounded-2xl font-black text-lg gap-3" onClick={() => window.open("https://github.com/explore", "_blank")}>
-                                                    Explore Frontiers <ArrowUpRight className="h-6 w-6" />
-                                                </Button>
-                                                <Button variant="ghost" size="lg" className="h-16 px-12 rounded-2xl font-black text-muted-foreground">
-                                                    Read Strategy Guide
-                                                </Button>
-                                            </div>
-                                        </CardContent>
+                            <div className="space-y-12 py-10">
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                    <Card className="glass-premium border-border/30 p-8 flex flex-col items-center text-center gap-4">
+                                        <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                            <Github className="h-6 w-6 text-primary" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-2xl font-black">{contributions?.total || 0}</h4>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Annual Contributions</p>
+                                        </div>
+                                    </Card>
+                                    <Card className="glass-premium border-border/30 p-8 flex flex-col items-center text-center gap-4">
+                                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center">
+                                            <GitBranch className="h-6 w-6 text-indigo-400" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-2xl font-black">{repositories?.length || 0}</h4>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Active Repositories</p>
+                                        </div>
+                                    </Card>
+                                    <Card className="glass-premium border-border/30 p-8 flex flex-col items-center text-center gap-4">
+                                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center">
+                                            <Star className="h-6 w-6 text-emerald-400" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-2xl font-black">{repositories?.reduce((acc: number, r: any) => acc + (r.stargazers_count || 0), 0) || 0}</h4>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Total Stars Received</p>
+                                        </div>
+                                    </Card>
+                                    <Card className="glass-premium border-border/30 p-8 flex flex-col items-center text-center gap-4">
+                                        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+                                            <Zap className="h-6 w-6 text-amber-400" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-2xl font-black">Elite</h4>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">Developer Status</p>
+                                        </div>
                                     </Card>
                                 </div>
+
+                                <Card className="glass-premium border-border/30 overflow-hidden">
+                                    <CardHeader className="p-8">
+                                        <CardTitle className="text-2xl font-black flex items-center gap-3">
+                                            <Sparkles className="h-6 w-6 text-primary" /> Open Source Pulse
+                                        </CardTitle>
+                                        <CardDescription>Your real-time impact on the global engineering collective.</CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="p-8 pt-0">
+                                        {repositories && repositories.length > 0 ? (
+                                            <div className="grid gap-4">
+                                                {repositories.slice(0, 5).map((repo: any) => (
+                                                    <div key={repo.name} className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border border-border/40 group hover:bg-muted/30 transition-all">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="p-2 rounded-xl bg-background/50 border border-border/20">
+                                                                <Book className="h-4 w-4" />
+                                                            </div>
+                                                            <div>
+                                                                <h5 className="font-black text-sm">{repo.name}</h5>
+                                                                <p className="text-[10px] font-medium text-muted-foreground">{repo.language || 'Documentation'}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-6">
+                                                            <div className="text-right">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Stars</p>
+                                                                <p className="font-black text-sm">{repo.stargazers_count}</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Forks</p>
+                                                                <p className="font-black text-sm">{repo.forks_count}</p>
+                                                            </div>
+                                                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={() => window.open(repo.html_url, '_blank')}>
+                                                                <ArrowUpRight className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="py-20 text-center space-y-4 opacity-40">
+                                                <Github className="h-12 w-12 mx-auto" />
+                                                <p className="font-black uppercase tracking-widest text-xs">Awaiting GitHub Synchronization</p>
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
                             </div>
                         </TabsContent>
                     </motion.div>

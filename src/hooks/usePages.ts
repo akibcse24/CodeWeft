@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
@@ -45,10 +45,6 @@ export function usePages() {
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
-      if (data) {
-        await db.pages.bulkPut(data);
-        await fetchLocal();
-      }
       return data as Page[];
     },
     enabled: !!user,
@@ -100,6 +96,9 @@ export function usePages() {
         is_favorite: false,
         is_public: false,
         tags: [],
+        // Server-generated columns (filled by trigger, nulled here for type safety)
+        search_content: null,
+        search_vector: null,
       };
 
       // 1. Local
@@ -114,13 +113,7 @@ export function usePages() {
         timestamp: Date.now()
       });
 
-      // 3. Background Sync
-      try {
-        await supabase.from("pages").insert(newPage);
-      } catch (e) {
-        console.warn("Background page creation sync deferred.");
-      }
-
+      // Sync queue handles cloud push
       return newPage;
     },
     onSettled: () => {
@@ -147,13 +140,7 @@ export function usePages() {
         timestamp: Date.now()
       });
 
-      // 3. Background Sync
-      try {
-        await supabase.from("pages").update(finalUpdates).eq("id", id);
-      } catch (e) {
-        console.warn("Background page update sync deferred.");
-      }
-
+      // Sync queue handles cloud push
       return current;
     },
     onSettled: () => {
@@ -175,12 +162,7 @@ export function usePages() {
         timestamp: Date.now()
       });
 
-      // 3. Background Sync
-      try {
-        await supabase.from("pages").update({ is_archived: true }).eq("id", id);
-      } catch (e) {
-        console.warn("Background page deletion sync deferred.");
-      }
+      // Sync queue handles cloud push
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["pages-cloud"] });
@@ -203,12 +185,28 @@ export function usePages() {
         timestamp: Date.now()
       });
 
-      // 3. Background Sync
-      try {
-        await supabase.from("pages").update(updates).eq("id", id);
-      } catch (e) {
-        console.warn("Background favorite toggle deferred.");
-      }
+      // Sync queue handles cloud push
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["pages-cloud"] });
+    },
+  });
+
+  const togglePublic = useMutation({
+    mutationFn: async ({ id, isPublic }: { id: string; isPublic: boolean }) => {
+      const updates = { is_public: !isPublic };
+
+      // 1. Local
+      await db.pages.update(id, updates);
+      await fetchLocal();
+
+      // 2. Queue
+      await db.sync_queue.add({
+        table: 'pages',
+        action: 'update',
+        data: { id, ...updates },
+        timestamp: Date.now()
+      });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["pages-cloud"] });
@@ -231,12 +229,7 @@ export function usePages() {
         timestamp: Date.now()
       });
 
-      // 3. Background Sync
-      try {
-        await supabase.from("pages").update(updates).eq("id", id);
-      } catch (e) {
-        console.warn("Background page move deferred.");
-      }
+      // Sync queue handles cloud push
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["pages-cloud"] });
@@ -264,7 +257,7 @@ export function usePages() {
     return (data as Page[]) || [];
   };
 
-  return {
+  return useMemo(() => ({
     pages: localPages,
     favoritePages: localFavorites,
     isLoading: pagesQuery.isLoading && localPages.length === 0,
@@ -273,9 +266,10 @@ export function usePages() {
     updatePage,
     deletePage,
     toggleFavorite,
+    togglePublic,
     movePage,
     searchPages,
-  };
+  }), [localPages, localFavorites, pagesQuery.isLoading, getPagePath, createPage, updatePage, deletePage, toggleFavorite, togglePublic, movePage, searchPages]);
 }
 
 export function usePage(id: string) {
@@ -298,7 +292,6 @@ export function usePage(id: string) {
         .single();
 
       if (error) throw error;
-      if (data) await db.pages.put(data as Page);
       return data as Page;
     },
     enabled: !!id,

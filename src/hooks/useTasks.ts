@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
@@ -31,7 +31,7 @@ export function useTasks() {
 
     // Simple poll or custom event could work, but for now we'll update on mutations
     // Dexie also has a middleware system or hooks but this is the simplest without dependencies
-  }, [user]);
+  }, [user?.id]);
 
   // Hook into Dexie changes (Crudely for now, better to use a real observer if possible)
   const refreshLocal = async () => {
@@ -44,7 +44,7 @@ export function useTasks() {
     setLocalTasks(data);
   };
 
-  // 2. Fetch from Cloud and populate local (Background Sync)
+  // 2. Fetch from Cloud and populate local (Handled by useSync, but kept here for manual refresh if needed)
   const tasksQuery = useQuery({
     queryKey: ["tasks-cloud", user?.id],
     queryFn: async () => {
@@ -56,11 +56,6 @@ export function useTasks() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-
-      // Update local cache with cloud data
-      if (data) {
-        await db.tasks.bulkPut(data);
-      }
       return data as Task[];
     },
     enabled: !!user,
@@ -173,12 +168,12 @@ export function useTasks() {
     },
   });
 
-  return {
+  return useMemo(() => ({
     tasks: localTasks,
     isLoading: tasksQuery.isLoading && localTasks.length === 0,
     error: tasksQuery.error,
     createTask,
     updateTask,
     deleteTask,
-  };
+  }), [localTasks, tasksQuery.isLoading, tasksQuery.error, createTask, updateTask, deleteTask]);
 }
