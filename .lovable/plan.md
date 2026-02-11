@@ -1,4 +1,4 @@
-
+##saved?
 # Restructure Notes to Match Notion Pro Experience
 
 ## Analysis of Reference Images
@@ -171,7 +171,7 @@ BEFORE                              AFTER
 
 Press / to continue...              Press 'space' for AI or '/' for commands
 
-[Block content only]                [+][⋮⋮] Block content
+[Block content only]                [+][â®â®] Block content
 
 Slash menu with basic               Slash menu with:
 categories                          - Media section (Image, Video, Audio...)
