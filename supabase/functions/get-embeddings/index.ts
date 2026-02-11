@@ -1,17 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-requested-with",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Max-Age": "86400",
-};
+import { corsHeaders } from "../_shared/cors.ts";
+import { validateUser } from "../_shared/auth.ts";
 
 serve(async (req) => {
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
-        return new Response('ok', { headers: corsHeaders, status: 200 });
+        return new Response('ok', { headers: corsHeaders });
     }
+
+    // Validate the user
+    const { user, response: authResponse } = await validateUser(req);
+    if (authResponse) return authResponse;
+
+    console.log(`[get-embeddings] Processing request for user: ${user?.id}`);
 
     try {
         const body = await req.json().catch(() => null);
@@ -58,9 +59,17 @@ serve(async (req) => {
                 statusText: response.statusText,
                 error: errorData.error,
             });
-            throw new Error(
-                errorData.error?.message || `Google API returned ${response.status}: ${response.statusText}`
-            );
+
+            const message = errorData.error?.message || `Google API returned ${response.status}: ${response.statusText}`;
+
+            // Re-throw with clear messaging for the status codes
+            if (response.status === 401 || response.status === 403) {
+                throw new Error(`Google API Authentication Error: ${message}. Check your API key.`);
+            } else if (response.status === 429) {
+                throw new Error(`Google API Quota Exceeded: ${message}`);
+            }
+
+            throw new Error(message);
         }
 
         const data = await response.json();
@@ -68,7 +77,7 @@ serve(async (req) => {
 
         if (!embedding || !Array.isArray(embedding)) {
             console.error('Invalid response format from Google:', JSON.stringify(data).slice(0, 500));
-            throw new Error('Failed to retrieve embedding from Google response');
+            throw new Error('Failed to retrieve embedding from Google response format');
         }
 
         return new Response(
@@ -78,11 +87,19 @@ serve(async (req) => {
 
     } catch (error) {
         console.error('Error in get-embeddings:', error.message);
+
+        let status = 500;
+        if (error.message.includes('API key') || error.message.includes('Authentication')) status = 503;
+        if (error.message.includes('Quota')) status = 429;
+
         return new Response(
-            JSON.stringify({ error: error.message }),
+            JSON.stringify({
+                error: error.message,
+                details: "Check Supabase project secrets for GOOGLE_API_KEY configuration."
+            }),
             {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-                status: error.message.includes('API key') ? 503 : 500
+                status: status
             }
         );
     }

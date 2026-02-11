@@ -6,10 +6,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-    useCodespaces, 
-    useStartCodespace, 
-    useStopCodespace, 
+import {
+    useCodespaces,
+    useStartCodespace,
+    useStopCodespace,
     useDeleteCodespace,
     useRebuildCodespace,
     getVSCodeDesktopUrl,
@@ -82,7 +82,7 @@ export function CodespacesDashboard() {
                     .from('github_settings')
                     .select('github_token')
                     .eq('user_id', user.id)
-                    .single();
+                    .maybeSingle();
                 if (data?.github_token) {
                     setGithubToken(data.github_token);
                 }

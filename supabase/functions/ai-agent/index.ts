@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 import { corsHeaders } from "../_shared/cors.ts";
+import { validateUser } from "../_shared/auth.ts";
 
 // Tool definitions for the agent
 const agentTools = [
@@ -141,6 +142,12 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  // Validate the user
+  const { user, response: authResponse } = await validateUser(req);
+  if (authResponse) return authResponse;
+
+  console.log(`[ai-agent] Processing request for user: ${user?.id}`);
 
   try {
     const { messages, mode = "chat", userId } = await req.json();

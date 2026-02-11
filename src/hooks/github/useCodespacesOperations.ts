@@ -7,12 +7,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as CodespacesService from '@/services/github/codespaces.service';
 import { toast } from 'sonner';
+import { useGitHub } from '@/hooks/useGitHub';
 
 export function useCodespaces() {
+    const { isConnected } = useGitHub();
     return useQuery({
         queryKey: ['github', 'codespaces'],
         queryFn: () => CodespacesService.listCodespaces(),
         staleTime: 1000 * 30, // 30 seconds
+        enabled: isConnected,
         refetchInterval: (query) => {
             const data = query.state.data;
             // Auto-refresh if any codespace is changing state
@@ -25,11 +28,12 @@ export function useCodespaces() {
 }
 
 export function useCodespace(name: string) {
+    const { isConnected } = useGitHub();
     return useQuery({
         queryKey: ['github', 'codespace', name],
         queryFn: () => CodespacesService.getCodespace(name),
         staleTime: 1000 * 30,
-        enabled: !!name,
+        enabled: !!name && isConnected,
         refetchInterval: (query) => {
             const data = query.state.data;
             const isTransitioning = data &&
@@ -40,10 +44,11 @@ export function useCodespace(name: string) {
 }
 
 export function useRepoMachines(owner: string, repo: string, branch?: string) {
+    const { isConnected } = useGitHub();
     return useQuery({
         queryKey: ['github', 'codespaces-machines', owner, repo, branch],
         queryFn: () => CodespacesService.getRepoMachines(owner, repo, branch),
-        enabled: !!owner && !!repo,
+        enabled: !!owner && !!repo && isConnected,
         staleTime: 1000 * 60 * 60, // 1 hour (unlikely to change often)
     });
 }

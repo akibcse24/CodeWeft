@@ -34,6 +34,15 @@ export async function safeInvoke<T = unknown>(
     showErrorToast?: boolean;
   }
 ): Promise<{ data: T | null; error: Error | null }> {
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    const error = new Error("Supabase is not correctly configured. Please check your system settings.");
+    console.error("[Supabase safeInvoke Error] Configuration missing:", error);
+    if (options?.showErrorToast !== false) {
+      toast.error(error.message);
+    }
+    return { data: null, error };
+  }
+
   try {
     const { showErrorToast = true, ...invokeOptions } = options || {};
     const { data, error } = await supabase.functions.invoke(functionName, invokeOptions);

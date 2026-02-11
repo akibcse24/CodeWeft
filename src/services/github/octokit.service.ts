@@ -49,31 +49,70 @@ export async function initializeOctokit(forceRefresh = false): Promise<Octokit> 
 
     currentToken = settings.github_token;
 
-    // Create new Octokit instance with authentication
+    // Create new Octokit instance with a custom request handler that proxies through Supabase
     octokitInstance = new Octokit({
         auth: currentToken,
-        userAgent: 'my-personal-space/1.0.0',
-        throttle: {
-            onRateLimit: (retryAfter, options, octokit) => {
-                logger.warn(
-                    `Request quota exhausted for request ${options.method} ${options.url}`
-                );
+        userAgent: 'CS-Learning-Hub/1.0.0',
+        request: {
+            fetch: async (url: string, options: any) => {
+                // Only proxy GitHub API calls
+                if (url.includes('api.github.com')) {
+                    const urlObj = new URL(url);
+                    const path = urlObj.pathname + urlObj.search;
 
-                if (options.request.retryCount === 0) {
-                    // Retry once after rate limit
-                    logger.info(`Retrying after ${retryAfter} seconds!`);
-                    return true;
+                    logger.debug(`[Octokit Proxy] ${options.method} ${path}`);
+
+                    try {
+                        const invokeOptions: any = {
+                            method: options.method || 'GET'
+                        };
+
+                        let functionPath = 'github-api?action=proxy';
+
+                        if (invokeOptions.method === 'GET' || invokeOptions.method === 'HEAD') {
+                            // Pass as query param for GET/HEAD
+                            functionPath += `&path=${encodeURIComponent(path)}`;
+                        } else {
+                            // Pass in body for others
+                            invokeOptions.body = {
+                                path,
+                                data: options.body ? JSON.parse(options.body) : undefined
+                            };
+                        }
+
+                        logger.debug(`[Octokit Proxy] Invoking ${functionPath}`);
+
+                        const { data, error } = await supabase.functions.invoke(functionPath, invokeOptions);
+
+                        if (error) {
+                            logger.error(`[Octokit Proxy] Invoke Error (${functionPath}):`, error);
+                            // Log body if it's a FunctionsHttpError
+                            if (error instanceof Error && 'context' in (error as any)) {
+                                try {
+                                    // FunctionsHttpError usually has the message as the response body
+                                    console.log("[Octokit Proxy] Detailed error context:", error);
+                                } catch (e) { /* ignore */ }
+                            }
+                            throw error;
+                        }
+
+                        // Reconstruct a Response-like object for Octokit
+                        return new Response(JSON.stringify(data), {
+                            status: 200, // The Edge Function handles the status internally and returns JSON
+                            headers: new Headers({
+                                'Content-Type': 'application/json'
+                            })
+                        });
+                    } catch (err) {
+                        logger.error(`[Octokit Proxy] Network error:`, err);
+                        throw err;
+                    }
                 }
-                return false;
-            },
-            onSecondaryRateLimit: (retryAfter, options, octokit) => {
-                // Does not retry - warns only
-                logger.warn(
-                    `Secondary rate limit hit for request ${options.method} ${options.url}`
-                );
-                return false;
-            },
-        },
+
+                // Fallback to standard fetch for non-GitHub URLs
+                return fetch(url, options);
+            }
+        }
     });
 
     return octokitInstance;

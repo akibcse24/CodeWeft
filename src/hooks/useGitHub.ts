@@ -1,8 +1,10 @@
-import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase, safeInvoke } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { logger } from "@/lib/logger";
+import { toast } from "sonner";
+import { useEffect, useMemo } from "react";
+import { db } from "@/lib/db";
 
 interface GitHubSettings {
   id: string;
@@ -63,80 +65,143 @@ export function useGitHub() {
   const { user, session } = useAuth();
   const queryClient = useQueryClient();
 
-  // Fetch GitHub settings
+
+  // Fetch settings - Check Dexie first, then server
   const {
     data: settings,
     isLoading: settingsLoading,
     error: settingsError,
   } = useQuery({
-    queryKey: ["github-settings", user?.id],
+    queryKey: ["github-settings"],
     queryFn: async () => {
+      console.log("[GitHub] Fetching settings for user:", user?.id);
       if (!user) return null;
 
-      const { data, error } = await supabase
-        .from("github_settings")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      // 1. Try Dexie first
+      const local = await db.github_settings.where("user_id").equals(user.id).first();
+      console.log("[GitHub] Local Dexie settings found:", !!local);
 
-      if (error) throw error;
-      return data as GitHubSettings | null;
+      // 2. Fetch from Edge Function
+      try {
+        const { data: cloud, error } = await supabase.functions.invoke("github-api?action=get-settings", {
+          method: "GET",
+          headers: { "Content-Type": "application/json" }
+        });
+
+        if (error) {
+          console.error("[GitHub] Cloud fetch error:", error);
+          // Fallback to local if server is down
+          return local as GitHubSettings || null;
+        }
+
+        // 3. Reconcile: If cloud is newer or different, update local
+        if (cloud) {
+          if (!local || cloud.updated_at > (local.updated_at || "")) {
+            console.log("[GitHub] Cloud settings are newer, updating local cache");
+            await db.github_settings.put({ ...cloud, user_id: user.id } as any);
+          }
+          return cloud as GitHubSettings;
+        }
+
+        return local as GitHubSettings || null;
+      } catch (err) {
+        console.warn("[GitHub] Cloud fetch failed, using local fallback:", err);
+        return local as GitHubSettings || null;
+      }
     },
     enabled: !!user,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  // Sync token from session if available (OAuth)
+  // Stabilize isConnected to prevent flickering during background reloads
+  const isConnected = useMemo(() => {
+    if (settingsLoading && !settings) return false; // Initial load
+    return !!settings?.github_token && !!settings?.github_username;
+  }, [settings, settingsLoading]);
+
+  // Background Sync Effect: If local exists but cloud doesn't, push local to cloud
   useEffect(() => {
-    const syncToken = async () => {
-      if (session?.provider_token && user && !settingsLoading) {
-        // If we don't have a token or it's different, sync it
-        if (!settings?.github_token || settings.github_token !== session.provider_token) {
-          try {
-            logger.info("Syncing GitHub token from session...");
-            const { data: rawData, error } = await safeInvoke("github-api?action=test", {
-              body: { token: session.provider_token },
-              method: "POST",
-            });
-            const data = rawData as TestConnectionResult;
+    let syncInProgress = false;
 
-            if (data?.valid) {
-              await supabase
-                .from("github_settings")
-                .upsert({
-                  user_id: user.id,
-                  github_token: session.provider_token,
-                  github_username: data.user?.login,
-                  avatar_url: data.user?.avatar_url,
-                  updated_at: new Date().toISOString(),
-                });
+    const syncToCloud = async () => {
+      if (!user || settingsLoading || !settings || syncInProgress) return;
 
-              queryClient.invalidateQueries({ queryKey: ["github-settings"] });
-              logger.info("GitHub token successfully synced from session");
+      // Only push if we have a token locally but cloud might be out of sync (no cloud id)
+      if (settings.github_token && settings.github_username && !settings.id) {
+        syncInProgress = true;
+        console.log("[GitHub] Background sync: Pushing local settings to cloud...");
+        try {
+          await supabase.functions.invoke("github-api?action=save", {
+            body: {
+              github_token: settings.github_token,
+              github_username: settings.github_username,
+              avatar_url: settings.avatar_url,
+              solutions_repo: settings.solutions_repo
             }
-          } catch (e) {
-            logger.error("Failed to sync GitHub token from session:", e);
-          }
+          });
+          // Update query cache to mark it as synced (gave us an ID)
+          queryClient.invalidateQueries({ queryKey: ["github-settings"] });
+        } catch (e) {
+          console.error("[GitHub] Background push failed:", e);
+        } finally {
+          syncInProgress = false;
         }
       }
     };
 
-    syncToken();
-  }, [session, user, settings, settingsLoading, queryClient]);
+    syncToCloud();
+  }, [user, settings, settingsLoading, queryClient]);
 
-  // Test connection with a token
-  const testConnection = useMutation({
-    mutationFn: async (token: string): Promise<TestConnectionResult> => {
-      const { data, error } = await supabase.functions.invoke("github-api?action=test", {
-        body: { token },
-        method: "POST",
+  if (settingsError) {
+    console.error("[GitHub] Global query error:", settingsError);
+  }
+
+  // Manual sync token from session — via Edge Function
+  const syncFromSession = async () => {
+    if (!session?.provider_token || !user) {
+      toast.error("No GitHub session found to sync.");
+      return;
+    }
+
+    try {
+      logger.info("[GitHub] Syncing GitHub token via Edge Function...");
+
+      const { data, error } = await supabase.functions.invoke("github-api?action=save", {
+        body: {
+          github_token: session.provider_token,
+          github_username: "session_user", // Edge function will refetch anyway if test is valid
+        }
       });
 
       if (error) throw error;
-      return data;
+
+      logger.info("[GitHub] Token successfully synced from session");
+      queryClient.invalidateQueries({ queryKey: ["github-settings"] });
+      toast.success("GitHub account synced successfully");
+    } catch (e) {
+      logger.error("[GitHub] Failed to sync GitHub token from session:", e);
+      toast.error("Failed to sync from session");
+    }
+  };
+
+  // Test connection with a token — via Edge Function
+  const testConnection = useMutation({
+    mutationFn: async (token: string): Promise<TestConnectionResult> => {
+      try {
+        const { data, error } = await supabase.functions.invoke("github-api?action=test", {
+          body: { token }
+        });
+
+        if (error) throw error;
+
+        return data as TestConnectionResult;
+      } catch (error) {
+        logger.error("Test connection error:", error);
+        throw error;
+      }
     },
   });
 
-  // Save GitHub settings
   const saveSettings = useMutation({
     mutationFn: async (newSettings: {
       github_token: string;
@@ -144,42 +209,48 @@ export function useGitHub() {
       avatar_url?: string;
       solutions_repo?: string;
     }) => {
+      console.log("[GitHub] Starting saveSettings via Edge Function for:", newSettings.github_username);
       if (!user) throw new Error("Not authenticated");
 
-      const { data: existing } = await supabase
-        .from("github_settings")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      try {
+        // 1. Save to local Dexie immediately for responsiveness
+        console.log("[GitHub] Saving to local Dexie...");
 
-      if (existing) {
-        const { data, error } = await supabase
-          .from("github_settings")
-          .update({
-            ...newSettings,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("user_id", user.id)
-          .select()
-          .single();
+        // Ensure we have an ID for Dexie PK
+        const existing = await db.github_settings.where("user_id").equals(user.id).first();
+        const idToUse = existing?.id || (settings as any)?.id || crypto.randomUUID();
 
-        if (error) throw error;
+        await db.github_settings.put({
+          id: idToUse,
+          user_id: user.id,
+          ...newSettings,
+          updated_at: new Date().toISOString(),
+        } as any);
+
+        // 2. Clear query cache to reflect local change immediately
+        queryClient.setQueryData(["github-settings"], (old: any) => ({
+          ...old,
+          ...newSettings,
+          user_id: user.id
+        }));
+
+        // 3. Attempt cloud save in background/parallel
+        const { data, error } = await supabase.functions.invoke("github-api?action=save", {
+          body: newSettings
+        });
+
+        if (error) {
+          console.warn("[GitHub] Cloud save deferred (will retry in background):", error);
+        }
+
         return data;
-      } else {
-        const { data, error } = await supabase
-          .from("github_settings")
-          .insert({
-            user_id: user.id,
-            ...newSettings,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        return data;
+      } catch (err) {
+        console.error("[GitHub] Save failed with exception:", err);
+        throw err;
       }
     },
     onSuccess: () => {
+      console.log("[GitHub] Invalidate queries starting...");
       queryClient.invalidateQueries({ queryKey: ["github-settings"] });
     },
   });
@@ -187,23 +258,42 @@ export function useGitHub() {
   // Disconnect GitHub
   const disconnect = useMutation({
     mutationFn: async () => {
+      console.log("[GitHub] Disconnecting via Edge Function...");
       if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase
-        .from("github_settings")
-        .delete()
-        .eq("user_id", user.id);
+      try {
+        // 1. Clear local Dexie immediately
+        await db.github_settings.where("user_id").equals(user.id).delete();
+        queryClient.setQueryData(["github-settings"], null);
 
-      if (error) throw error;
+        // 2. Call cloud disconnect
+        const { error } = await supabase.functions.invoke("github-api?action=disconnect", {
+          method: "POST"
+        });
+
+        if (error) {
+          console.error("[GitHub] Disconnect error:", error);
+          throw error;
+        }
+      } catch (error) {
+        // Log error but allow mutation to proceed so we can clear local state
+        console.error("[GitHub] Server-side disconnect failed:", error);
+      }
     },
     onSuccess: () => {
+      // Force clear the query data immediately
+      queryClient.setQueryData(["github-settings"], null);
+
+      // Invalidate all related queries
       queryClient.invalidateQueries({ queryKey: ["github-settings"] });
       queryClient.invalidateQueries({ queryKey: ["github-contributions"] });
       queryClient.invalidateQueries({ queryKey: ["github-events"] });
+      queryClient.invalidateQueries({ queryKey: ["github-repositories"] });
     },
   });
 
-  // Fetch contributions
+
+  // Fetch contributions — via Edge Function
   const {
     data: contributions,
     isLoading: contributionsLoading,
@@ -211,21 +301,21 @@ export function useGitHub() {
   } = useQuery({
     queryKey: ["github-contributions", user?.id],
     queryFn: async (): Promise<ContributionData | null> => {
-      const { data, error } = await safeInvoke("github-api?action=contributions", {
-        method: "POST",
-        body: {},
-      });
+      if (!isConnected) return null;
 
-      if (error) {
+      try {
+        const { data, error } = await supabase.functions.invoke("github-api?action=contributions");
+        if (error) throw error;
+        return data as ContributionData;
+      } catch (error) {
         logger.error("Contributions error:", error);
         return null;
       }
-      return data as ContributionData;
     },
-    enabled: !!settings?.github_token && !!settings?.github_username,
+    enabled: isConnected,
   });
 
-  // Fetch recent events (commits, PRs, etc.)
+  // Fetch recent events — via Edge Function
   const {
     data: events,
     isLoading: eventsLoading,
@@ -233,21 +323,21 @@ export function useGitHub() {
   } = useQuery({
     queryKey: ["github-events", user?.id],
     queryFn: async (): Promise<GitHubEvent[] | null> => {
-      const { data, error } = await safeInvoke("github-api?action=events", {
-        method: "POST",
-        body: {},
-      });
+      if (!isConnected) return null;
 
-      if (error) {
+      try {
+        const { data, error } = await supabase.functions.invoke("github-api?action=events");
+        if (error) throw error;
+        return data as GitHubEvent[];
+      } catch (error) {
         logger.error("Events error:", error);
         return null;
       }
-      return data as GitHubEvent[];
     },
-    enabled: !!settings?.github_token && !!settings?.github_username,
+    enabled: isConnected,
   });
 
-  // Fetch all repositories
+  // Fetch all repositories — via Edge Function
   const {
     data: repositories,
     isLoading: repositoriesLoading,
@@ -255,21 +345,27 @@ export function useGitHub() {
   } = useQuery({
     queryKey: ["github-repositories", user?.id],
     queryFn: async (): Promise<GitHubRepo[] | null> => {
-      const { data, error } = await safeInvoke("github-api?action=repos", {
-        method: "POST",
-        body: {},
-      });
+      if (!isConnected) return null;
 
-      if (error) {
-        logger.error("Repositories error:", error);
+      try {
+        const { data, error } = await supabase.functions.invoke("github-api?action=repos");
+        if (error) {
+          console.error("[GitHub] Repositories fetch error:", error);
+          throw error;
+        }
+        return data as GitHubRepo[];
+      } catch (error) {
+        logger.error("[GitHub] Repositories exception:", error);
+        // Distinguish between 401 (invalid token) and others
+        if (error instanceof Error && error.message.includes('401')) {
+          toast.error("GitHub connection unauthorized. Please reconnect in Settings.");
+        }
         return null;
       }
-      return data as GitHubRepo[];
     },
-    enabled: !!settings?.github_token && !!settings?.github_username,
+    enabled: isConnected,
   });
 
-  const isConnected = !!settings?.github_token && !!settings?.github_username;
 
   return {
     settings,
@@ -288,12 +384,21 @@ export function useGitHub() {
     repositories,
     repositoriesLoading,
     refetchRepositories,
+    syncFromSession,
   };
 }
 
-// Hook for fetching repo-specific data
+// Hook for fetching repo-specific data — direct GitHub API calls
 export function useGitHubRepo(githubUrl: string | null | undefined) {
   const { user } = useAuth();
+
+  // Get the GitHub token from settings
+  const { data: settings } = useQuery({
+    queryKey: ["github-settings"],
+    enabled: !!user,
+  });
+  const isConnected = !!(settings as GitHubSettings | null)?.github_token && !!(settings as GitHubSettings | null)?.github_username;
+  const token = (settings as GitHubSettings | null)?.github_token;
 
   const parseGitHubUrl = (url: string) => {
     const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
@@ -305,7 +410,8 @@ export function useGitHubRepo(githubUrl: string | null | undefined) {
 
   const parsed = githubUrl ? parseGitHubUrl(githubUrl) : null;
 
-  // Fetch repo stats
+
+  // Fetch repo stats — via Edge Function
   const {
     data: repoStats,
     isLoading: repoLoading,
@@ -315,19 +421,16 @@ export function useGitHubRepo(githubUrl: string | null | undefined) {
     queryKey: ["github-repo", parsed?.owner, parsed?.repo],
     queryFn: async () => {
       if (!parsed) return null;
-
-      const { data, error } = await safeInvoke(
-        `github-api?action=repo&owner=${parsed.owner}&repo=${parsed.repo}`,
-        { method: "POST", body: {} }
+      const { data, error } = await supabase.functions.invoke(
+        `github-api?action=repo&owner=${parsed.owner}&repo=${parsed.repo}`
       );
-
       if (error) throw error;
       return data;
     },
-    enabled: !!parsed && !!user,
+    enabled: !!parsed && !!user && !!isConnected,
   });
 
-  // Fetch commits
+  // Fetch commits — via Edge Function
   const {
     data: commits,
     isLoading: commitsLoading,
@@ -336,16 +439,13 @@ export function useGitHubRepo(githubUrl: string | null | undefined) {
     queryKey: ["github-commits", parsed?.owner, parsed?.repo],
     queryFn: async () => {
       if (!parsed) return null;
-
-      const { data, error } = await safeInvoke(
-        `github-api?action=commits&owner=${parsed.owner}&repo=${parsed.repo}&limit=5`,
-        { method: "POST", body: {} }
+      const { data, error } = await supabase.functions.invoke(
+        `github-api?action=commits&owner=${parsed.owner}&repo=${parsed.repo}&limit=5`
       );
-
       if (error) throw error;
       return data;
     },
-    enabled: !!parsed && !!user,
+    enabled: !!parsed && !!user && !!isConnected,
   });
 
   return {
@@ -360,31 +460,27 @@ export function useGitHubRepo(githubUrl: string | null | undefined) {
   };
 }
 
-// Hook for importing DSA solutions
+// Hook for importing DSA solutions — direct GitHub API calls
 export function useGitHubSolutions() {
   const { user } = useAuth();
 
+  // Get the GitHub settings (token + solutions_repo)
+  const { data: settings } = useQuery({
+    queryKey: ["github-settings"],
+    enabled: !!user,
+  });
+  const isConnected = !!(settings as GitHubSettings | null)?.github_token && !!(settings as GitHubSettings | null)?.github_username;
+  const ghSettings = settings as GitHubSettings | null;
+
   const fetchSolutions = useMutation({
     mutationFn: async (repo?: string) => {
-      const url = repo
-        ? `github-api?action=solutions&repo=${encodeURIComponent(repo)}`
-        : "github-api?action=solutions";
+      if (!isConnected) throw new Error("GitHub not connected");
 
-      const { data, error } = await safeInvoke(url, {
-        method: "POST",
-        body: {},
-      });
-
+      const { data, error } = await supabase.functions.invoke(
+        `github-api?action=solutions${repo ? `&repo=${repo}` : ""}`
+      );
       if (error) throw error;
-      return data as {
-        solutions: Array<{
-          path: string;
-          name: string;
-          language: string;
-          url: string;
-        }>;
-        total: number;
-      };
+      return data;
     },
   });
 

@@ -26,3 +26,12 @@ dist-ssr
 # Secrets
 .env
 .env.local
+
+# Tooling and Temp Files
+.agent/
+.opencode/
+nul
+supabase/.temp/
+debug-connection-flow.js
+debug-github-connection.js
+test-github-api.js

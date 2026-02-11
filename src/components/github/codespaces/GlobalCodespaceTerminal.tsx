@@ -21,7 +21,7 @@ export function GlobalCodespaceTerminal() {
                     .from('github_settings')
                     .select('github_token')
                     .eq('user_id', user.id)
-                    .single();
+                    .maybeSingle();
                 if (data?.github_token) {
                     setGithubToken(data.github_token);
                 }

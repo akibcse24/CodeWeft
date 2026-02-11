@@ -28,7 +28,7 @@ export function PushPullDashboard({ onRepoSelect, onBranchSelect }: PushPullDash
     const [selectedBranch, setSelectedBranch] = useState<string>('main');
 
     // Fetch repositories
-    const { data: repositories, isLoading: isLoadingRepos } = useQuery({
+    const { data: repositories, isLoading: isLoadingRepos, error: repoError } = useQuery({
         queryKey: ['user-repositories'],
         queryFn: () => listUserRepositories({ sort: 'updated', per_page: 50 }),
         staleTime: 5 * 60 * 1000,
@@ -92,6 +92,10 @@ export function PushPullDashboard({ onRepoSelect, onBranchSelect }: PushPullDash
                         <label className="text-sm font-medium">Repository</label>
                         {isLoadingRepos ? (
                             <Skeleton className="h-10 w-full" />
+                        ) : repoError ? (
+                            <div className="p-3 text-xs text-destructive bg-destructive/10 border border-destructive/20 rounded-md">
+                                Failed to load repositories. Please check your GitHub connection in Settings.
+                            </div>
                         ) : (
                             <Select onValueChange={handleRepoChange}>
                                 <SelectTrigger>

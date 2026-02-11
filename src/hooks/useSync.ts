@@ -103,42 +103,36 @@ export function useSync(enableBackgroundSync = true) {
         isSyncingRef.current = false;
     }, [user]);
 
-    const pullRemoteChanges = useCallback(async () => {
+    const pullRemoteChanges = useCallback(async (specificTable?: TableName) => {
         if (!user) return;
 
-        for (const tableName of CORE_TABLES) {
-            try {
-                // Get the last record's timestamp from local DB to perform a delta sync
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const table = (db as unknown as Record<string, any>)[tableName];
-                if (!table) {
-                    console.warn(`[Sync] Table ${tableName} not found in Dexie`);
-                    continue;
-                }
+        const tablesToPull = specificTable ? [specificTable] : CORE_TABLES;
+        console.log(`[Sync] Pulling remote changes for: ${specificTable || 'all tables'}`);
 
-                // Get the last record's timestamp from local DB to perform a delta sync
+        for (const tableName of (tablesToPull as string[])) {
+            try {
+                const table = (db as unknown as Record<string, any>)[tableName];
+                if (!table) continue;
+
                 const lastRecord = await table
                     .orderBy('updated_at')
                     .last();
 
                 const lastSyncTime = (lastRecord as { updated_at?: string })?.updated_at || new Date(0).toISOString();
 
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const { data, error } = await (supabase.from(tableName as TableName) as any)
                     .select("*")
                     .eq("user_id", user.id)
                     .gt("updated_at", lastSyncTime);
 
                 if (error) {
-                    // Log but don't stop the whole sync process for one table error
                     console.error(`[Sync] Pull failed for ${tableName}:`, error);
                     continue;
                 }
 
                 if (data && data.length > 0) {
-                    // bulkPut handles updates/inserts based on primary key (id)
                     await table.bulkPut(data);
-                    console.log(`[Sync] Pulled ${data.length} new records for ${tableName}`);
+                    console.log(`[Sync] Pulled ${data.length} records for ${tableName}`);
                 }
             } catch (err) {
                 console.error(`[Sync] Exception during pull for ${tableName}:`, err);
@@ -178,8 +172,12 @@ export function useSync(enableBackgroundSync = true) {
             // Supabase Realtime subscription for instant updates
             const channel = supabase
                 .channel('schema-db-changes')
-                .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-                    pullRemoteChanges();
+                .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+                    const table = payload.table as TableName;
+                    // Only sync if it's one of our core tables
+                    if (CORE_TABLES.includes(table as any)) {
+                        pullRemoteChanges(table);
+                    }
                 })
                 .subscribe((status) => {
                     if (status === 'SUBSCRIBED') {

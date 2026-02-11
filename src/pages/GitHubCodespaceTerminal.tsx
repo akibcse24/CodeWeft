@@ -18,7 +18,7 @@ export default function GitHubCodespaceTerminal() {
     const { name } = useParams<{ name: string }>();
     const navigate = useNavigate();
     const { data: codespaces, isLoading: loadingCodespaces } = useCodespaces();
-    
+
     const [loadingToken, setLoadingToken] = useState(true);
     const [hasToken, setHasToken] = useState(false);
 
@@ -34,7 +34,7 @@ export default function GitHubCodespaceTerminal() {
                     .from('github_settings')
                     .select('github_token')
                     .eq('user_id', user.id)
-                    .single();
+                    .maybeSingle();
                 setHasToken(!!data?.github_token);
             }
             setLoadingToken(false);

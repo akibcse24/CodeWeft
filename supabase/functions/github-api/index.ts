@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 import { corsHeaders } from "../_shared/cors.ts";
+import { validateUser } from "../_shared/auth.ts";
 
 interface GitHubRepo {
   name: string;
@@ -41,66 +42,220 @@ interface GitHubContributionDay {
   contributionCount: number;
 }
 
+/**
+ * Unified helper for all GitHub API requests
+ * Standardizes headers, error handling, and response parsing
+ */
+async function fetchGitHub(url: string, token: string, options: RequestInit = {}) {
+  const method = options.method || "GET";
+
+  const headers = new Headers({
+    "Authorization": `Bearer ${token}`,
+    "Accept": "application/vnd.github.v3+json",
+    "User-Agent": "CS-Learning-Hub",
+    ...options.headers
+  });
+
+  if (method !== "GET" && method !== "HEAD" && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  console.log(`[github-api] fetchGitHub: ${method} ${url}`);
+
+  try {
+    const response = await fetch(url, { ...options, headers });
+
+    if (!response.ok) {
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = { message: await response.text() || response.statusText };
+      }
+
+      console.error(`[github-api] GitHub API Error (${response.status}):`, errorData);
+
+      return {
+        data: null,
+        error: errorData.message || "Upstream GitHub Error",
+        status: response.status,
+        details: errorData
+      };
+    }
+
+    const contentType = response.headers.get("content-type");
+    let data;
+    if (contentType?.includes("application/json")) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+
+    return { data, error: null, status: response.status };
+  } catch (err) {
+    console.error(`[github-api] Fetch Exception:`, err);
+    return { data: null, error: String(err), status: 500 };
+  }
+}
+
+function createJsonResponse(data: any, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 Deno.serve(async (req) => {
+  console.log(`[github-api] Received request: ${req.method} ${req.url}`);
+
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const authHeader = req.headers.get("Authorization");
+  console.log(`[github-api] Incoming request: ${req.method} ${req.url}`);
+  console.log(`[github-api] Authorization header present: ${!!authHeader} (length: ${authHeader?.length || 0})`);
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    console.log("Authorization Header present:", !!authHeader);
+    // Authenticate the user
+    const { user, response: authResponse } = await validateUser(req);
+    if (authResponse) {
+      console.error("[github-api] Authentication failed");
+      return authResponse;
+    }
+
+    console.log("[github-api] Authenticated user found:", user.id);
 
     const supabaseClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_ANON_KEY") ?? "",
       {
         global: {
-          headers: { Authorization: authHeader || "" },
+          headers: { Authorization: req.headers.get("Authorization") || "" },
         },
       }
     );
 
-    // Get the user from the request
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseClient.auth.getUser();
+    // Get user's GitHub settings action
+    const url = new URL(req.url);
+    const method = req.method;
 
-    if (userError || !user) {
-      console.error("Auth error details:", userError);
-      return new Response(JSON.stringify({ error: "Unauthorized", details: userError?.message }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Parse body carefully - only once
+    let body = null;
+    if (method !== "GET" && method !== "HEAD") {
+      try {
+        body = await req.json();
+      } catch (e) {
+        console.warn("[github-api] Could not parse request body:", e);
+      }
     }
 
-    console.log("Authenticated user found:", user.id);
+    const action = url.searchParams.get("action") || body?.action;
 
-    // Get user's GitHub settings
-    const { data: settings, error: settingsError } = await supabaseClient
+    console.log(`GitHub API action: ${action} (${method}) for user: ${user.id}`);
+
+    // Create a service client for DB operations to ensure reliability
+    const serviceClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+    );
+
+    // Pre-fetch settings for actions that need a token
+    const { data: settings } = await serviceClient
       .from("github_settings")
       .select("*")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    const url = new URL(req.url);
-    const action = url.searchParams.get("action");
-
-    console.log(`GitHub API action: ${action} for user: ${user.id}`);
-
-    // For actions that need a token, check if we have one
     const token = settings?.github_token;
 
     switch (action) {
+      case "proxy": {
+        const path = body?.path || url.searchParams.get("path");
+
+        if (!path) return createJsonResponse({ error: "Path is required for proxy" }, 400);
+        if (!token) return createJsonResponse({ error: "GitHub not connected" }, 400);
+
+        const targetUrl = path.startsWith("http") ? path : `https://api.github.com${path.startsWith("/") ? "" : "/"}${path}`;
+
+        const { data, error, status, details } = await fetchGitHub(targetUrl, token, {
+          method,
+          body: method !== "GET" && method !== "HEAD" && body?.data ? JSON.stringify(body.data) : undefined
+        });
+
+        if (error) return createJsonResponse({ error, details }, status);
+        return createJsonResponse(data, status);
+      }
+
+      case "get-settings": {
+        const { data, error } = await serviceClient
+          .from("github_settings")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (error) {
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        return new Response(JSON.stringify(data), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      case "disconnect": {
+        const { error } = await serviceClient
+          .from("github_settings")
+          .delete()
+          .eq("user_id", user.id);
+
+        if (error) {
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        return new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       case "test": {
         // Test connection with provided token
-        const body = await req.json();
-        const testToken = body.token;
+        const testToken = body?.token;
 
-        if (!testToken) {
+        if (!testToken) return createJsonResponse({ error: "Token is required" }, 400);
+
+        const { data: userData, error, status } = await fetchGitHub("https://api.github.com/user", testToken);
+
+        if (error) {
+          return createJsonResponse({ error: "Invalid token", valid: false, details: error }, 200);
+        }
+
+        return createJsonResponse({
+          valid: true,
+          user: {
+            login: userData.login,
+            avatar_url: userData.avatar_url,
+            name: userData.name,
+          },
+        });
+      }
+
+      case "save": {
+        // Save GitHub settings
+        // body is already parsed in the parent scope
+        const { github_token, github_username, avatar_url, solutions_repo } = body || {};
+
+        if (!github_token || !github_username) {
           return new Response(
-            JSON.stringify({ error: "Token is required" }),
+            JSON.stringify({ error: "Token and username are required" }),
             {
               status: 400,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -108,36 +263,44 @@ Deno.serve(async (req) => {
           );
         }
 
-        const response = await fetch("https://api.github.com/user", {
-          headers: {
-            Authorization: `Bearer ${testToken}`,
-            Accept: "application/vnd.github.v3+json",
-            "User-Agent": "CS-Learning-Hub",
-          },
-        });
+        console.log(`[github-api] Saving settings for user: ${user.id}`);
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error("GitHub API error during test:", errorData);
+        // Use service role client if available to ensure reliability, 
+        // fall back to anon if not (it will still work because we already validated the user)
+        const serviceClient = createClient(
+          Deno.env.get("SUPABASE_URL") ?? "",
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+        );
+
+        const { data, error } = await serviceClient
+          .from("github_settings")
+          .upsert({
+            user_id: user.id,
+            github_token,
+            github_username,
+            avatar_url,
+            solutions_repo,
+            updated_at: new Date().toISOString(),
+          }, {
+            onConflict: "user_id",
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error("[github-api] Save error:", error);
           return new Response(
-            JSON.stringify({ error: "Invalid token", valid: false, details: errorData }),
+            JSON.stringify({ error: error.message }),
             {
-              status: 200,
+              status: 500,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             }
           );
         }
 
-        const userData: GitHubUser = await response.json();
+        console.log("[github-api] Save successful");
         return new Response(
-          JSON.stringify({
-            valid: true,
-            user: {
-              login: userData.login,
-              avatar_url: userData.avatar_url,
-              name: userData.name,
-            },
-          }),
+          JSON.stringify({ success: true, data }),
           {
             status: 200,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -146,195 +309,52 @@ Deno.serve(async (req) => {
       }
 
       case "user": {
-        if (!token) {
-          return new Response(
-            JSON.stringify({ error: "GitHub not connected" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
+        if (!token) return createJsonResponse({ error: "GitHub not connected" }, 400);
 
-        const response = await fetch("https://api.github.com/user", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/vnd.github.v3+json",
-            "User-Agent": "CS-Learning-Hub",
-          },
-        });
-
-        if (!response.ok) {
-          return new Response(
-            JSON.stringify({ error: "Failed to fetch user" }),
-            {
-              status: response.status,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const userData: GitHubUser = await response.json();
-        return new Response(JSON.stringify(userData), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        const { data, error, status } = await fetchGitHub("https://api.github.com/user", token);
+        if (error) return createJsonResponse({ error }, status);
+        return createJsonResponse(data, status);
       }
 
       case "repos": {
-        if (!token) {
-          return new Response(
-            JSON.stringify({ error: "GitHub not connected" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
+        const type = url.searchParams.get("type") || "all";
+        const sort = url.searchParams.get("sort") || "updated";
+        const direction = url.searchParams.get("direction") || "desc";
+        const per_page = url.searchParams.get("per_page") || "100";
 
-        const response = await fetch("https://api.github.com/user/repos?sort=updated&per_page=100", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/vnd.github.v3+json",
-            "User-Agent": "CS-Learning-Hub",
-          },
-        });
+        if (!token) return createJsonResponse({ error: "GitHub not connected" }, 400);
 
-        if (!response.ok) {
-          return new Response(
-            JSON.stringify({ error: "Failed to fetch repositories" }),
-            {
-              status: response.status,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const repos: GitHubRepo[] = await response.json();
-        return new Response(JSON.stringify(repos), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      case "repo": {
-        if (!token) {
-          return new Response(
-            JSON.stringify({ error: "GitHub not connected" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const owner = url.searchParams.get("owner");
-        const repo = url.searchParams.get("repo");
-
-        if (!owner || !repo) {
-          return new Response(
-            JSON.stringify({ error: "Owner and repo are required" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const response = await fetch(
-          `https://api.github.com/repos/${owner}/${repo}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/vnd.github.v3+json",
-              "User-Agent": "CS-Learning-Hub",
-            },
-          }
+        const { data, error, status } = await fetchGitHub(
+          `https://api.github.com/user/repos?type=${type}&sort=${sort}&direction=${direction}&per_page=${per_page}`,
+          token
         );
 
-        if (!response.ok) {
-          return new Response(
-            JSON.stringify({ error: "Failed to fetch repo" }),
-            {
-              status: response.status,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const repoData: GitHubRepo = await response.json();
-        return new Response(JSON.stringify(repoData), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        if (error) return createJsonResponse({ error }, status);
+        return createJsonResponse(data);
       }
 
       case "commits": {
-        if (!token) {
-          return new Response(
-            JSON.stringify({ error: "GitHub not connected" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
+        if (!token) return createJsonResponse({ error: "GitHub not connected" }, 400);
 
         const owner = url.searchParams.get("owner");
         const repo = url.searchParams.get("repo");
         const limit = url.searchParams.get("limit") || "10";
 
-        if (!owner || !repo) {
-          return new Response(
-            JSON.stringify({ error: "Owner and repo are required" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
+        if (!owner || !repo) return createJsonResponse({ error: "Owner and repo are required" }, 400);
 
-        const response = await fetch(
+        const { data, error, status } = await fetchGitHub(
           `https://api.github.com/repos/${owner}/${repo}/commits?per_page=${limit}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/vnd.github.v3+json",
-              "User-Agent": "CS-Learning-Hub",
-            },
-          }
+          token
         );
 
-        if (!response.ok) {
-          return new Response(
-            JSON.stringify({ error: "Failed to fetch commits" }),
-            {
-              status: response.status,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const commits: GitHubCommit[] = await response.json();
-        return new Response(JSON.stringify(commits), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        if (error) return createJsonResponse({ error }, status);
+        return createJsonResponse(data);
       }
 
       case "contributions": {
-        if (!token || !settings?.github_username) {
-          return new Response(
-            JSON.stringify({ error: "GitHub not connected" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
+        if (!token || !settings?.github_username) return createJsonResponse({ error: "GitHub not connected" }, 400);
 
         const username = settings.github_username;
-
         const query = `
           query($username: String!) {
             user(login: $username) {
@@ -353,179 +373,118 @@ Deno.serve(async (req) => {
           }
         `;
 
-        const response = await fetch("https://api.github.com/graphql", {
+        const { data, error, status } = await fetchGitHub("https://api.github.com/graphql", token, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-            "User-Agent": "CS-Learning-Hub",
-          },
-          body: JSON.stringify({
-            query,
-            variables: { username },
-          }),
+          body: JSON.stringify({ query, variables: { username } }),
         });
 
-        if (!response.ok) {
-          console.error("GraphQL error:", await response.text());
-          return new Response(
-            JSON.stringify({ error: "Failed to fetch contributions" }),
-            {
-              status: response.status,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const data = await response.json();
+        if (error) return createJsonResponse({ error }, status);
 
         if (data.errors) {
           console.error("GraphQL errors:", data.errors);
-          return new Response(
-            JSON.stringify({ error: "GraphQL query failed" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
+          return createJsonResponse({ error: "GraphQL query failed" }, 400);
         }
 
         const calendar = data.data.user.contributionsCollection.contributionCalendar;
-        const contributions: GitHubContributionDay[] = [];
-
-        for (const week of calendar.weeks) {
-          for (const day of week.contributionDays) {
-            contributions.push({
-              date: day.date,
-              contributionCount: day.contributionCount,
-            });
-          }
-        }
-
-        return new Response(
-          JSON.stringify({
-            total: calendar.totalContributions,
-            contributions,
-          }),
-          {
-            status: 200,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          }
-        );
-      }
-
-      case "events": {
-        if (!token || !settings?.github_username) {
-          return new Response(
-            JSON.stringify({ error: "GitHub not connected" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const response = await fetch(
-          `https://api.github.com/users/${settings.github_username}/events?per_page=30`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/vnd.github.v3+json",
-              "User-Agent": "CS-Learning-Hub",
-            },
-          }
+        const contributions: GitHubContributionDay[] = calendar.weeks.flatMap((week: any) =>
+          week.contributionDays.map((day: any) => ({
+            date: day.date,
+            contributionCount: day.contributionCount,
+          }))
         );
 
-        if (!response.ok) {
-          return new Response(
-            JSON.stringify({ error: "Failed to fetch events" }),
-            {
-              status: response.status,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
-
-        const events = await response.json();
-        return new Response(JSON.stringify(events), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        return createJsonResponse({
+          total: calendar.totalContributions,
+          contributions,
         });
       }
 
-      case "solutions": {
-        if (!token) {
-          return new Response(
-            JSON.stringify({ error: "GitHub not connected" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
+      case "events": {
+        if (!token || !settings?.github_username) return createJsonResponse({ error: "GitHub not connected" }, 400);
+
+        const { data, error, status } = await fetchGitHub(
+          `https://api.github.com/users/${settings.github_username}/events?per_page=30`,
+          token
+        );
+        if (error) return createJsonResponse({ error }, status);
+        return createJsonResponse(data);
+      }
+
+      case "codespaces": {
+        if (!token) return createJsonResponse({ error: "GitHub not connected" }, 400);
+
+        const { data, error, status } = await fetchGitHub("https://api.github.com/user/codespaces", token);
+        if (error) return createJsonResponse({ error }, status);
+        return createJsonResponse(data);
+      }
+
+      case "codespace-action": {
+        if (!token) return createJsonResponse({ error: "GitHub not connected" }, 400);
+
+        const { codespace_name, subaction } = body || {};
+        if (!codespace_name || !subaction) return createJsonResponse({ error: "Codespace name and subaction are required" }, 400);
+
+        let method = "POST";
+        let targetUrl = `https://api.github.com/user/codespaces/${codespace_name}/${subaction}`;
+
+        if (subaction === "delete") {
+          method = "DELETE";
+          targetUrl = `https://api.github.com/user/codespaces/${codespace_name}`;
         }
+
+        const { data, error, status } = await fetchGitHub(targetUrl, token, { method });
+        if (error) return createJsonResponse({ error: `Failed to ${subaction} codespace`, details: error }, status);
+        return createJsonResponse(data);
+      }
+
+      case "git-tree": {
+        if (!token) return createJsonResponse({ error: "GitHub not connected" }, 400);
+
+        const owner = url.searchParams.get("owner");
+        const repo = url.searchParams.get("repo");
+        const tree_sha = url.searchParams.get("tree_sha") || "main";
+        const recursive = url.searchParams.get("recursive") === "true" ? "1" : "0";
+
+        if (!owner || !repo) return createJsonResponse({ error: "Owner and repo are required" }, 400);
+
+        const { data, error, status } = await fetchGitHub(
+          `https://api.github.com/repos/${owner}/${repo}/git/trees/${tree_sha}?recursive=${recursive}`,
+          token
+        );
+
+        if (error) return createJsonResponse({ error }, status);
+        return createJsonResponse(data);
+      }
+
+      case "solutions": {
+        if (!token) return createJsonResponse({ error: "GitHub not connected" }, 400);
 
         const repoParam = url.searchParams.get("repo");
         const repo = repoParam || settings?.solutions_repo;
 
-        if (!repo) {
-          return new Response(
-            JSON.stringify({ error: "Solutions repo not configured" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
+        if (!repo) return createJsonResponse({ error: "Solutions repo not configured" }, 400);
 
         const [owner, repoName] = repo.split("/");
-        if (!owner || !repoName) {
-          return new Response(
-            JSON.stringify({ error: "Invalid repo format. Use owner/repo" }),
-            {
-              status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            }
-          );
-        }
+        if (!owner || !repoName) return createJsonResponse({ error: "Invalid repo format. Use owner/repo" }, 400);
 
-        const response = await fetch(
+        // Try main first
+        let { data, error, status } = await fetchGitHub(
           `https://api.github.com/repos/${owner}/${repoName}/git/trees/main?recursive=1`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/vnd.github.v3+json",
-              "User-Agent": "CS-Learning-Hub",
-            },
-          }
+          token
         );
 
-        if (!response.ok) {
-          const masterResponse = await fetch(
+        // Fallback to master
+        if (error) {
+          const masterResult = await fetchGitHub(
             `https://api.github.com/repos/${owner}/${repoName}/git/trees/master?recursive=1`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: "application/vnd.github.v3+json",
-                "User-Agent": "CS-Learning-Hub",
-              },
-            }
+            token
           );
-
-          if (!masterResponse.ok) {
-            return new Response(
-              JSON.stringify({ error: "Failed to fetch repo contents" }),
-              {
-                status: masterResponse.status,
-                headers: { ...corsHeaders, "Content-Type": "application/json" },
-              }
-            );
-          }
-
-          const data = await masterResponse.json();
-          return parseAndReturnSolutions(data, owner, repoName);
+          data = masterResult.data;
+          error = masterResult.error;
+          status = masterResult.status;
         }
 
-        const data = await response.json();
+        if (error) return createJsonResponse({ error: "Failed to fetch repo contents" }, status);
         return parseAndReturnSolutions(data, owner, repoName);
       }
 
@@ -579,8 +538,5 @@ function parseAndReturnSolutions(
     }
   }
 
-  return new Response(JSON.stringify({ solutions, total: solutions.length }), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  return createJsonResponse({ solutions, total: solutions.length });
 }

@@ -87,7 +87,6 @@ export default function Whiteboard() {
                 }
 
                 if (data) {
-
                     dbRecordIdRef.current = data.id;
 
                     if (data.content && typeof data.content === 'object') {
@@ -102,8 +101,16 @@ export default function Whiteboard() {
             }
         };
 
+        const timeoutId = setTimeout(() => {
+            if (isLoading) {
+                console.warn("Whiteboard load timed out, showing board anyway");
+                setIsLoading(false);
+            }
+        }, 8000); // 8 second safety timeout
+
         loadWhiteboard();
-    }, [session?.user?.id, toast]);
+        return () => clearTimeout(timeoutId);
+    }, [session?.user?.id, toast, isLoading]);
 
     // Handle Editor Mount and Persistence
     const handleMount = useCallback((editorInstance: Editor) => {
@@ -118,7 +125,7 @@ export default function Whiteboard() {
         if (snapshot) {
             console.log("Loading snapshot from DB");
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (editorInstance.store as any).loadSnapshot(snapshot);
+            (editorInstance as any).loadSnapshot(snapshot);
         }
 
         // Subscribe to changes and debounce save
@@ -131,7 +138,7 @@ export default function Whiteboard() {
                     if (!session?.user?.id) return;
 
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    const newSnapshot = (editorInstance.store as any).getSnapshot();
+                    const newSnapshot = (editorInstance as any).getSnapshot();
 
                     try {
                         if (dbRecordIdRef.current) {

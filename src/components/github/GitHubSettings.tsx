@@ -10,6 +10,7 @@ import { useGitHub } from "@/hooks/useGitHub";
 import { useAuth } from "@/hooks/useAuth";
 import { GitHubAppSetup } from "./GitHubAppSetup";
 import { toast } from "sonner";
+import { NetworkTest } from "@/components/NetworkTest";
 
 export function GitHubSettings() {
   const {
@@ -19,14 +20,16 @@ export function GitHubSettings() {
     testConnection,
     saveSettings,
     disconnect,
+    syncFromSession,
   } = useGitHub();
-  const { signInWithGithub } = useAuth();
+  const { signInWithGithub, session } = useAuth();
 
   const [token, setToken] = useState("");
   const [solutionsRepo, setSolutionsRepo] = useState(settings?.solutions_repo || "");
   const [testResult, setTestResult] = useState<{
     valid: boolean;
     user?: { login: string; avatar_url: string; name: string };
+    error?: string;
   } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
 
@@ -48,7 +51,8 @@ export function GitHubSettings() {
         toast.error("Invalid token");
       }
     } catch (error) {
-      toast.error("Failed to test connection");
+      console.error("Connection test failed:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to test connection");
       setTestResult({ valid: false });
     } finally {
       setIsTesting(false);
@@ -91,7 +95,10 @@ export function GitHubSettings() {
       await disconnect.mutateAsync();
       toast.success("GitHub disconnected");
     } catch (error) {
-      toast.error("Failed to disconnect");
+      console.error("Disconnect failed:", error);
+      // Even if it fails, it might be due to the record already being gone or network issues.
+      // We should probably clear local state or prompt user.
+      toast.error("Failed to disconnect completely. Please try signing out and back in.");
     }
   };
 
@@ -208,6 +215,28 @@ export function GitHubSettings() {
         ) : (
           <>
             {/* Disconnected State - Setup */}
+
+            {/* Session Detection UI */}
+            {!isConnected && session?.provider_token && (
+              <div className="flex items-center justify-between p-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 mb-4">
+                <div className="flex items-center gap-3">
+                  <Github className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <div>
+                    <p className="font-medium text-sm text-blue-900 dark:text-blue-100">GitHub Session Detected</p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300">You are signed in with GitHub. Want to use this account?</p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="bg-blue-100 hover:bg-blue-200 text-blue-800 dark:bg-blue-900 dark:hover:bg-blue-800 dark:text-blue-100"
+                  onClick={() => syncFromSession()}
+                >
+                  Connect
+                </Button>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="github-token">Personal Access Token</Label>
               <div className="flex gap-2">
@@ -271,7 +300,10 @@ export function GitHubSettings() {
                 ) : (
                   <>
                     <XCircle className="h-5 w-5 text-red-600" />
-                    <p className="text-sm text-red-600">Invalid token. Please check and try again.</p>
+                    <div className="flex flex-col">
+                      <p className="text-sm font-medium text-red-600">Connection Failed</p>
+                      <p className="text-xs text-red-500">{testResult.error || "Invalid token or network issue."}</p>
+                    </div>
                   </>
                 )}
               </div>
@@ -329,6 +361,9 @@ export function GitHubSettings() {
           </>
         )}
       </CardContent>
+      <div className="mt-4">
+        <NetworkTest />
+      </div>
     </Card>
   );
 }
