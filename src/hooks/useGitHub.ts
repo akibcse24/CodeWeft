@@ -67,9 +67,15 @@ async function fetchGitHubDirect<T>(
   token: string
 ): Promise<{ data: T | null; error: string | null }> {
   try {
+    const trimmed = token.trim();
+    if (!trimmed) return { data: null, error: "Token is empty" };
+
+    // Diagnostic log (safe)
+    console.log(`[GitHub Debug] Token check: Length=${trimmed.length}, Prefix=${trimmed.substring(0, 4)}***`);
+
     const res = await fetch(url, {
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${trimmed}`,
         Accept: "application/vnd.github+json",
       },
     });

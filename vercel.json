@@ -1,7 +1,22 @@
 {
+    "headers": [
+        {
+            "source": "/manifest.webmanifest",
+            "headers": [
+                {
+                    "key": "Cache-Control",
+                    "value": "public, max-age=0"
+                },
+                {
+                    "key": "Access-Control-Allow-Origin",
+                    "value": "*"
+                }
+            ]
+        }
+    ],
     "rewrites": [
         {
-            "source": "/(.*)",
+            "source": "/((?!api/|manifest\\.webmanifest|favicon\\.png|logo\\.png).*)",
             "destination": "/index.html"
         }
     ]

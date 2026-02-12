@@ -246,7 +246,7 @@ export function GitHubSettings() {
                   placeholder="ghp_xxxxxxxxxxxx"
                   value={token}
                   onChange={(e) => {
-                    setToken(e.target.value);
+                    setToken(e.target.value.trim());
                     setTestResult(null);
                   }}
                 />

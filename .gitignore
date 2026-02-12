@@ -35,3 +35,5 @@ supabase/.temp/
 debug-connection-flow.js
 debug-github-connection.js
 test-github-api.js
+.vercel
+.env*.local

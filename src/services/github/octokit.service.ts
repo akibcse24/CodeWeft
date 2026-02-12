@@ -18,6 +18,7 @@ import { logger } from '@/lib/logger';
 // Singleton instance
 let octokitInstance: Octokit | null = null;
 let currentToken: string | null = null;
+let cachedUserId: string | null = null;
 
 import { db } from '@/lib/db';
 
@@ -31,13 +32,17 @@ export async function initializeOctokit(forceRefresh = false, providedUserId?: s
     // Fetch user's GitHub token from configured settings
     // console.log('[Octokit] Getting user/session...', providedUserId ? `(ID Provided: ${providedUserId})` : '(No ID)');
 
-    let userId = providedUserId;
+    let userId = providedUserId || cachedUserId;
+
+    if (providedUserId) {
+        cachedUserId = providedUserId;
+    }
 
     if (!userId) {
         // Use getSession with a timeout race to prevent indefinite hanging
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Auth timeout')), 5000)
+            setTimeout(() => reject(new Error('Auth timeout')), 15000)
         );
 
         try {
@@ -46,6 +51,7 @@ export async function initializeOctokit(forceRefresh = false, providedUserId?: s
                 console.error('[Octokit] Auth error:', result.error);
             }
             userId = result.data?.session?.user?.id;
+            if (userId) cachedUserId = userId;
         } catch (err) {
             console.error('[Octokit] Auth timeout or error:', err);
             // Fallback: try getUser if getSession fails/times out, but this might also hang?
@@ -80,11 +86,14 @@ export async function initializeOctokit(forceRefresh = false, providedUserId?: s
     }
 
     console.log('[Octokit] Creating new instance with token.');
-    currentToken = newToken;
+    const trimmedToken = newToken.trim();
+    console.log(`[Octokit Debug] Token details: Length=${trimmedToken.length}, Prefix=${trimmedToken.substring(0, 4)}***`);
+
+    currentToken = trimmedToken;
 
     // Create new Octokit instance for direct client-side usage
     octokitInstance = new Octokit({
-        auth: currentToken,
+        auth: currentToken.trim(),
         userAgent: 'CS-Learning-Hub/1.0.0',
         // No custom request handler needed for direct access
         // Octokit uses global fetch by default in modern environments
@@ -216,4 +225,5 @@ export async function refreshOctokit(): Promise<Octokit> {
 export function clearOctokit(): void {
     octokitInstance = null;
     currentToken = null;
+    cachedUserId = null;
 }
