@@ -80,27 +80,61 @@ class EventBusService {
             this.addToHistory(fullEvent);
         }
 
-        memoryService.storeShortTerm({
-            type: "event",
-            content: { type: fullEvent.type, data: fullEvent.data }
-        });
+        try {
+            memoryService.storeShortTerm({
+                type: "event",
+                content: { type: fullEvent.type, data: fullEvent.data }
+            });
+        } catch (error) {
+            console.warn("[EventBus] Failed to store event in memory service:", error);
+        }
 
         const handlers = this.handlers.get(fullEvent.type) || [];
-        const promises: Promise<void>[] = [];
+        const promises: Promise<any>[] = [];
+
+        const wrapHandler = (handler: EventHandler, type: string) => {
+            return (async () => {
+                try {
+                    await Promise.resolve(handler(fullEvent));
+                    return { success: true };
+                } catch (error) {
+                    console.error(`[EventBus] Handler (${type}) failed for event ${fullEvent.type}:`, error);
+                    return { success: false, error };
+                }
+            })();
+        };
 
         for (const handler of handlers) {
-            promises.push(Promise.resolve(handler(fullEvent)));
+            promises.push(wrapHandler(handler, "specific"));
         }
 
         for (const handler of this.wildcardHandlers) {
-            promises.push(Promise.resolve(handler(fullEvent)));
+            promises.push(wrapHandler(handler, "wildcard"));
         }
 
         await Promise.allSettled(promises);
     }
 
+    private sanitizeEventData(data: any): any {
+        if (!data) return data;
+        try {
+            const dataStr = JSON.stringify(data);
+            if (dataStr.length > 2000) {
+                return { _truncated: true, _length: dataStr.length, _snippet: dataStr.substring(0, 100) + "..." };
+            }
+        } catch (e) {
+            return "[Unserializable Data]";
+        }
+        return data;
+    }
+
     private addToHistory(event: Event): void {
-        this.eventHistory.push(event);
+        const historyEvent = {
+            ...event,
+            data: this.sanitizeEventData(event.data)
+        };
+
+        this.eventHistory.push(historyEvent);
 
         if (this.eventHistory.length > this.maxHistorySize) {
             this.eventHistory.shift();

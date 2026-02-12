@@ -403,10 +403,11 @@ function BlockItemContent({
   }, [block, onChange]);
 
   useEffect(() => {
-    if (contentRef.current && onInput) {
+    const el = contentRef.current;
+    if (el && onInput) {
       const handler = (e: Event) => onInput(e as unknown as React.FormEvent<HTMLElement>);
-      contentRef.current.addEventListener('input', handler);
-      return () => contentRef.current?.removeEventListener('input', handler);
+      el.addEventListener('input', handler);
+      return () => el.removeEventListener('input', handler);
     }
   }, [onInput, block.type]);
 
@@ -2399,7 +2400,7 @@ export function BlockEditor({ blocks, onChange, readOnly = false, pages = [], on
     setSlashMenuOpen(false);
     setSlashSearchTerm("");
     setSelectedMenuIndex(0);
-  }, [activeBlockId, blocks, updateBlock, askAI, onChange]);
+  }, [activeBlockId, blocks, updateBlock, onChange, user?.id]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setDragActiveId(event.active.id as string);

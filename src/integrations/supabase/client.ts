@@ -19,7 +19,9 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage,
     persistSession: true,
     autoRefreshToken: true,
-  }
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+  },
 });
 
 /**
@@ -45,7 +47,35 @@ export async function safeInvoke<T = unknown>(
 
   try {
     const { showErrorToast = true, ...invokeOptions } = options || {};
-    const { data, error } = await supabase.functions.invoke(functionName, invokeOptions);
+
+    let finalUrl = functionName;
+    const finalOptions = { ...invokeOptions };
+
+    // Handle GET params from body for convenience
+    if (invokeOptions.method === 'GET' && invokeOptions.body) {
+      const params = new URLSearchParams();
+      Object.entries(invokeOptions.body).forEach(([key, value]) => {
+        params.append(key, String(value));
+      });
+      const queryString = params.toString();
+      if (queryString) {
+        finalUrl = `${functionName}?${queryString}`;
+      }
+      // Remove body from GET request
+      delete finalOptions.body;
+    }
+
+    // Log diagnostic information before invoking
+    console.log(`[Supabase safeInvoke] Invoking function: ${finalUrl}`);
+    console.log(`[Supabase safeInvoke] Options:`, JSON.stringify(finalOptions, null, 2));
+
+    // Check current session
+    const { data: sessionData } = await supabase.auth.getSession();
+    console.log(`[Supabase safeInvoke] Session exists:`, !!sessionData.session);
+    console.log(`[Supabase safeInvoke] Session expires at:`, sessionData.session?.expires_at);
+    console.log(`[Supabase safeInvoke] User ID:`, sessionData.session?.user?.id);
+
+    const { data, error } = await supabase.functions.invoke(finalUrl, finalOptions);
 
     if (error) {
       // Force suppress for background services like embeddings to avoid console spam
@@ -63,13 +93,24 @@ export async function safeInvoke<T = unknown>(
       }
 
       if (error instanceof Error) {
-        if (error.message.includes('CORS')) {
+        const errorMsg = error.message.toLowerCase();
+
+        // Check for 401 Unauthorized specifically
+        if (errorMsg.includes('401') || errorMsg.includes('unauthorized') || errorMsg.includes('auth')) {
+          console.warn(`[Supabase 401] Authentication failed for function "${functionName}". Session may be expired or invalid.`);
+          if (showErrorToast) {
+            toast.error("Session expired or unauthorized. Please sign in again to continue.");
+          }
+          return { data: null, error: new Error("UNAUTHORIZED") };
+        }
+
+        if (errorMsg.includes('cors')) {
           if (showErrorToast) toast.error("Network restriction (CORS) prevented service access.");
-        } else if (error.message.includes('JWT')) {
+        } else if (errorMsg.includes('jwt') || errorMsg.includes('token')) {
           if (showErrorToast) toast.error("Session expired. Please sign in again.");
         } else {
           // Check for 500 errors specifically to guide the user
-          if (error.message.includes('500') || error.message.includes('non-2xx')) {
+          if (errorMsg.includes('500') || errorMsg.includes('non-2xx')) {
             console.warn(`[Supabase 500 Warning] Function "${functionName}" returned a server error. This often means a secret (like OPENAI_API_KEY) is missing or an API quota was hit. Check Supabase function logs.`);
           }
           if (showErrorToast) {

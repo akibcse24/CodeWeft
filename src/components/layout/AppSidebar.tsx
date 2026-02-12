@@ -73,8 +73,13 @@ function NavSection({ title, items, defaultOpen = false }: NavSectionProps) {
 
   // Persistent state for collapsible sections
   const [isOpen, setIsOpen] = useState(() => {
-    const saved = localStorage.getItem(`sidebar-section-${title}`);
-    return saved ? JSON.parse(saved) : defaultOpen;
+    try {
+      const saved = localStorage.getItem(`sidebar-section-${title}`);
+      return saved ? JSON.parse(saved) : defaultOpen;
+    } catch (e) {
+      console.warn(`[Sidebar] Failed to parse sidebar-section-${title}:`, e);
+      return defaultOpen;
+    }
   });
 
   const hasActiveItem = items.some((item) => location.pathname === item.url);
@@ -251,8 +256,13 @@ export function AppSidebar({ className }: AppSidebarProps) {
   }), [activeTaskCount]);
 
   const [notesOpen, setNotesOpen] = useState(() => {
-    const saved = localStorage.getItem("sidebar-notes-open");
-    return saved ? JSON.parse(saved) : true;
+    try {
+      const saved = localStorage.getItem("sidebar-notes-open");
+      return saved ? JSON.parse(saved) : true;
+    } catch (e) {
+      console.warn("[Sidebar] Failed to parse sidebar-notes-open:", e);
+      return true;
+    }
   });
 
   const toggleNotesOpen = (open: boolean) => {

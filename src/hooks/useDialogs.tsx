@@ -226,7 +226,7 @@ export function useDialogs() {
       <confirmDialog.ConfirmDialog />
       <promptDialog.PromptDialog />
     </>
-  ), [confirmDialog.ConfirmDialog, promptDialog.PromptDialog]);
+  ), []);
 
   return useMemo(() => ({
     confirm: confirmDialog.confirm,

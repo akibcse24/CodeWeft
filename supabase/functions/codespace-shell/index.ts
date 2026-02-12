@@ -15,6 +15,29 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 const GITHUB_API_BASE = "https://api.github.com";
 
+// Security limits
+const activeConnections = new Map<string, { socket: WebSocket; lastActivity: number }>();
+const MAX_CONNECTIONS_PER_USER = 3;
+const CONNECTION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+const MAX_CMD_BUFFER_SIZE = 10000;
+
+// Clean up inactive connections periodically
+setInterval(() => {
+    const now = Date.now();
+    for (const [userId, connection] of activeConnections.entries()) {
+        if (now - connection.lastActivity > CONNECTION_TIMEOUT) {
+            console.log(`Closing inactive connection for user: ${userId}`);
+            try {
+                connection.socket.close();
+            } catch (err) {
+                // Silently ignore close errors for inactive connections
+                console.debug(`Failed to close connection ${userId}:`, err);
+            }
+            activeConnections.delete(userId);
+        }
+    }
+}, 60 * 1000); // Check every minute
+
 interface AuthMessage {
     type: "auth";
     token: string;
@@ -153,6 +176,26 @@ Deno.serve(async (req: Request) => {
                     const authResult = await verifyGitHubToken(message.token);
 
                     if (authResult.valid) {
+                        const userId = authResult.username || 'unknown';
+
+                        // Check connection limits
+                        const userConnections = Array.from(activeConnections.entries())
+                            .filter(([id]) => id === userId).length;
+
+                        if (userConnections >= MAX_CONNECTIONS_PER_USER) {
+                            socket.send(JSON.stringify({
+                                type: 'error',
+                                message: 'Maximum connection limit reached. Please close other connections.'
+                            }));
+                            socket.close();
+                            return;
+                        }
+
+                        activeConnections.set(userId, {
+                            socket,
+                            lastActivity: Date.now()
+                        });
+
                         authenticated = true;
                         githubToken = message.token;
                         username = authResult.username || null;
@@ -240,12 +283,22 @@ Deno.serve(async (req: Request) => {
                         return;
                     }
 
+                    // Update activity
+                    if (username) {
+                        const conn = activeConnections.get(username);
+                        if (conn) conn.lastActivity = Date.now();
+                    }
+
                     const input = message.data;
 
                     if (input === "\r" || input === "\n") {
                         const cmd = cmdBuffer.trim();
                         cmdBuffer = "";
                         socket.send(JSON.stringify({ type: "output", data: "\r\n" }));
+
+                        // Sanitize command for safe display/logging
+                        // eslint-disable-next-line no-control-regex
+                        const sanitizedCmd = cmd.replace(/[\x00-\x1F\x7F]/g, '');
 
                         if (cmd === "ls") {
                             socket.send(JSON.stringify({
@@ -270,10 +323,10 @@ Deno.serve(async (req: Request) => {
                                 type: "output",
                                 data: "\r\n\x1b[1;36mAvailable commands:\x1b[0m\r\n  ls, pwd, whoami, uname -a, git status, clear, help\r\n\r\nThis is a proxy shell that mimics a real terminal experience.\r\n",
                             }));
-                        } else if (cmd !== "") {
+                        } else if (sanitizedCmd !== "") {
                             socket.send(JSON.stringify({
                                 type: "output",
-                                data: `\x1b[31mCommand not found: ${cmd}\x1b[0m\r\nTip: Use 'help' to see available proxy commands.\r\n`,
+                                data: `\x1b[31mCommand not found: ${sanitizedCmd}\x1b[0m\r\nTip: Use 'help' to see available proxy commands.\r\n`,
                             }));
                         }
 
@@ -288,8 +341,16 @@ Deno.serve(async (req: Request) => {
                         cmdBuffer = "";
                         socket.send(JSON.stringify({ type: "output", data: "^C\r\n\x1b[1;32m$\x1b[0m " }));
                     } else {
-                        cmdBuffer += input;
-                        socket.send(JSON.stringify({ type: "output", data: input }));
+                        // Only add printable characters and check buffer size
+                        if (input.length === 1 && input >= ' ' && input <= '~') {
+                            if (cmdBuffer.length < MAX_CMD_BUFFER_SIZE) {
+                                cmdBuffer += input;
+                                socket.send(JSON.stringify({ type: "output", data: input }));
+                            } else {
+                                // Buffer full - give feedback
+                                socket.send(JSON.stringify({ type: "output", data: "\x07" })); // Bell
+                            }
+                        }
                     }
                     break;
                 }
@@ -315,6 +376,10 @@ Deno.serve(async (req: Request) => {
 
     socket.onclose = () => {
         console.log(`WebSocket closed for codespace: ${codespaceName}`);
+        // Clean up connection tracking
+        if (username) {
+            activeConnections.delete(username);
+        }
     };
 
     return response;

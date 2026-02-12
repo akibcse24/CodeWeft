@@ -35,7 +35,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ error, errorInfo });
-    
+
     // Log to monitoring service in production
     if (import.meta.env.PROD) {
       // TODO: Send to error tracking service (e.g., Sentry)
@@ -112,6 +112,7 @@ export class ErrorBoundary extends Component<Props, State> {
 }
 
 // Hook for functional components to trigger error boundaries
+// eslint-disable-next-line react-refresh/only-export-components
 export function useErrorBoundary() {
   const throwError = (error: Error) => {
     throw error;

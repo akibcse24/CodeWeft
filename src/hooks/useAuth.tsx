@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useMemo, useCallback, R
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { queryClient } from "@/lib/query-client";
+import { db } from "@/lib/db";
 
 interface AuthContextType {
   user: User | null;
@@ -82,13 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     console.log("[Auth] signOut called");
 
-    // Don't await Supabase call — it may hang. Let it run in background.
-    supabase.auth.signOut()
-      .then(() => console.log("[Auth] Server-side signOut succeeded"))
-      .catch((err) => console.warn("[Auth] Server-side signOut failed:", err));
-
-    // Immediately clear local state (don't wait for server)
-    console.log("[Auth] Clearing local state...");
+    // Clear local state first to update UI immediately
     setUser(null);
     setSession(null);
 
@@ -96,11 +91,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log("[Auth] Clearing query cache...");
     queryClient.clear();
 
-    // Clear Supabase session from localStorage to prevent auto-signin
-    console.log("[Auth] Clearing Supabase session from localStorage...");
-    localStorage.removeItem('sb-ukboercbnitgrhpflcbb-auth-token');
+    // Clear and re-open Dexie to purge user data
+    try {
+      if (db.isOpen()) {
+        console.log("[Auth] Clearing local database...");
+        // Instead of deleting the whole DB, we can just clear the tables 
+        // to avoid schema re-initialization issues
+        const tableNames = db.tables.map(t => t.name);
+        await Promise.all(tableNames.map(name => db.table(name).clear()));
+      }
+    } catch (e) {
+      console.warn("[Auth] Failed to clear local database, but proceeding:", e);
+    }
 
-    // Redirect to auth page
+    // Clear sync cursors and other app-specific metadata from localStorage
+    console.log("[Auth] Purging sync cursors and metadata...");
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('last_sync_') || key.startsWith('last_github_sync'))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+
+    // Clear Supabase session from localStorage explicitly just in case
+    // (Wait for signout to finish if possible, but don't block)
+    try {
+      await supabase.auth.signOut();
+      console.log("[Auth] Server-side signOut succeeded");
+    } catch (err) {
+      console.warn("[Auth] Server-side signOut error (ignored):", err);
+    }
+
+    // Final purge of any potential auth tokens in localStorage
+    Object.keys(localStorage).forEach(key => {
+      if (key.includes('-auth-token')) localStorage.removeItem(key);
+    });
+
+    // Redirect to auth page or home
     console.log("[Auth] Redirecting to /auth...");
     window.location.href = "/auth";
   }, []);
@@ -117,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {

@@ -323,7 +323,7 @@ export default function Notes() {
         isDirtyRef.current = false;
       }
     };
-  }, [selectedPageId, performSave]);
+  }, [selectedPageId, performSave, updatePage]);
 
   // Handle block link scrolling
   useEffect(() => {
@@ -489,10 +489,10 @@ export default function Notes() {
                 <span>Indexing</span>
               </div>
 
-              <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-opacity duration-500 min-w-[80px]">
+              <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-opacity duration-500">
                 <div className={cn("h-1.5 w-1.5 rounded-full transition-all duration-500", isSaving ? "bg-primary animate-pulse" : "bg-muted-foreground/30")} />
                 <span className="text-muted-foreground/60 transition-colors duration-300">
-                  {isSaving ? "Saving..." : "Saved"}
+                  {isSaving ? "Saving Local..." : "Auto-saved"}
                 </span>
               </div>
               <div className="flex items-center gap-1 bg-background/50 backdrop-blur-sm p-1 rounded-lg border border-border/40 shadow-sm">

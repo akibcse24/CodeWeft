@@ -63,7 +63,16 @@ async function fetchGitHub(url: string, token: string, options: RequestInit = {}
   console.log(`[github-api] fetchGitHub: ${method} ${url}`);
 
   try {
-    const response = await fetch(url, { ...options, headers });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       let errorData;
@@ -98,7 +107,7 @@ async function fetchGitHub(url: string, token: string, options: RequestInit = {}
   }
 }
 
-function createJsonResponse(data: any, status = 200) {
+function createJsonResponse(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -162,20 +171,28 @@ Deno.serve(async (req) => {
     );
 
     // Pre-fetch settings for actions that need a token
-    const { data: settings } = await serviceClient
+    const { data: settings, error: settingsError } = await serviceClient
       .from("github_settings")
       .select("*")
       .eq("user_id", user.id)
       .maybeSingle();
 
+    if (settingsError) {
+      console.error("[github-api] Error fetching settings from DB:", settingsError);
+    }
+
     const token = settings?.github_token;
+    console.log(`[github-api] Token status for user ${user.id}: ${token ? "Found (length " + token.length + ")" : "Not found"}`);
 
     switch (action) {
       case "proxy": {
         const path = body?.path || url.searchParams.get("path");
 
         if (!path) return createJsonResponse({ error: "Path is required for proxy" }, 400);
-        if (!token) return createJsonResponse({ error: "GitHub not connected" }, 400);
+        if (!token) {
+          console.warn("[github-api] Proxy failed: Token not found in database for user", user.id);
+          return createJsonResponse({ error: "GitHub not connected", code: "GITHUB_NOT_CONNECTED" }, 401);
+        }
 
         const targetUrl = path.startsWith("http") ? path : `https://api.github.com${path.startsWith("/") ? "" : "/"}${path}`;
 
@@ -184,47 +201,34 @@ Deno.serve(async (req) => {
           body: method !== "GET" && method !== "HEAD" && body?.data ? JSON.stringify(body.data) : undefined
         });
 
-        if (error) return createJsonResponse({ error, details }, status);
+        if (error) {
+          console.warn(`[github-api] Upstream GitHub error: ${status}`, details || error);
+          return createJsonResponse({ error, details, source: "github" }, status);
+        }
         return createJsonResponse(data, status);
       }
 
       case "get-settings": {
-        const { data, error } = await serviceClient
-          .from("github_settings")
-          .select("*")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (error) {
-          return new Response(JSON.stringify({ error: error.message }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+        if (settingsError) {
+          return createJsonResponse({ error: settingsError.message }, 500);
         }
-
-        return new Response(JSON.stringify(data), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return createJsonResponse(settings, 200);
       }
 
+
       case "disconnect": {
-        const { error } = await serviceClient
+        console.log("[github-api] Disconnecting user:", user.id);
+        const { error: deleteError } = await serviceClient
           .from("github_settings")
           .delete()
           .eq("user_id", user.id);
 
-        if (error) {
-          return new Response(JSON.stringify({ error: error.message }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+        if (deleteError) {
+          console.error("[github-api] Disconnect failed:", deleteError);
+          return createJsonResponse({ error: deleteError.message }, 500);
         }
 
-        return new Response(JSON.stringify({ success: true }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return createJsonResponse({ success: true }, 200);
       }
       case "test": {
         // Test connection with provided token
@@ -385,9 +389,10 @@ Deno.serve(async (req) => {
           return createJsonResponse({ error: "GraphQL query failed" }, 400);
         }
 
-        const calendar = data.data.user.contributionsCollection.contributionCalendar;
-        const contributions: GitHubContributionDay[] = calendar.weeks.flatMap((week: any) =>
-          week.contributionDays.map((day: any) => ({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const calendar = (data as any).data.user.contributionsCollection.contributionCalendar;
+        const contributions: GitHubContributionDay[] = calendar.weeks.flatMap((week: { contributionDays: Array<{ date: string; contributionCount: number }> }) =>
+          week.contributionDays.map((day: { date: string; contributionCount: number }) => ({
             date: day.date,
             contributionCount: day.contributionCount,
           }))
@@ -508,10 +513,15 @@ Deno.serve(async (req) => {
 });
 
 function parseAndReturnSolutions(
-  data: { tree: Array<{ path: string; type: string }> },
+  data: { tree?: Array<{ path: string; type: string }> },
   owner: string,
   repoName: string
 ) {
+  if (!data || !Array.isArray(data.tree)) {
+    console.warn(`[github-api] No tree data found for ${owner}/${repoName}`);
+    return createJsonResponse({ solutions: [], total: 0 });
+  }
+
   const codeExtensions = [".py", ".js", ".ts", ".java", ".cpp", ".c", ".go", ".rs"];
   const solutions: Array<{
     path: string;

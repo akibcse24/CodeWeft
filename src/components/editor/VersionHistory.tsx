@@ -27,6 +27,7 @@ interface VersionHistoryProps {
     onClose: () => void;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function VersionHistory({
     versions,
     currentVersionId,
@@ -67,9 +68,9 @@ export function VersionHistory({
             const selectedVersionObjects = selectedArray
                 .map(id => versions.find(v => v.id === id))
                 .filter((v): v is PageVersion => v !== undefined);
-            
+
             if (selectedVersionObjects.length === 2) {
-                const [older, newer] = selectedVersionObjects.sort((a, b) => 
+                const [older, newer] = selectedVersionObjects.sort((a, b) =>
                     new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
                 );
                 onCompare(older, newer);
@@ -109,8 +110,8 @@ export function VersionHistory({
                     <span className="text-xs text-muted-foreground">
                         {selectedArray.length} versions selected
                     </span>
-                    <Button 
-                        size="sm" 
+                    <Button
+                        size="sm"
                         className="h-7 text-xs"
                         onClick={handleCompare}
                     >
@@ -140,11 +141,11 @@ export function VersionHistory({
                             return (
                                 <div key={version.id} className="group">
                                     {/* Version Header */}
-                                    <div 
+                                    <div
                                         className={cn(
                                             "flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors",
-                                            isSelected 
-                                                ? "bg-primary/5" 
+                                            isSelected
+                                                ? "bg-primary/5"
                                                 : "hover:bg-muted/30"
                                         )}
                                         onClick={() => setExpandedVersion(
@@ -152,11 +153,11 @@ export function VersionHistory({
                                         )}
                                     >
                                         {/* Checkbox (for comparison) */}
-                                        <div 
+                                        <div
                                             className={cn(
                                                 "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors",
-                                                isSelected 
-                                                    ? "bg-primary border-primary" 
+                                                isSelected
+                                                    ? "bg-primary border-primary"
                                                     : "border-muted-foreground/30 hover:border-primary/50"
                                             )}
                                             onClick={(e) => {
@@ -295,10 +296,10 @@ export function useVersionHistory(
             createdByName: 'You',
             changeDescription,
         };
-        
+
         setVersions(prev => [newVersion, ...prev]);
         setCurrentVersionId(newVersion.id);
-        
+
         await saveVersionToStorage(newVersion);
     };
 

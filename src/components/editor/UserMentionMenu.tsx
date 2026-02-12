@@ -21,6 +21,7 @@ interface UserMentionMenuProps {
     selectedIndex: number;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function UserMentionMenu({
     isOpen,
     searchTerm,
@@ -35,15 +36,15 @@ export function UserMentionMenu({
 
     const filteredUsers = useMemo(() => {
         if (!searchTerm) return users.slice(0, 10);
-        
+
         const term = searchTerm.toLowerCase();
-        return users.filter(user => 
+        return users.filter(user =>
             user.name.toLowerCase().includes(term) ||
             user.username.toLowerCase().includes(term)
         ).slice(0, 10);
     }, [searchTerm, users]);
 
-    const showCreateOption = searchTerm && 
+    const showCreateOption = searchTerm &&
         !filteredUsers.some(u => u.username.toLowerCase() === searchTerm.toLowerCase()) &&
         onCreateUser;
 
@@ -95,16 +96,16 @@ export function UserMentionMenu({
                                 onClick={() => onSelect(user)}
                                 className={cn(
                                     "w-full flex items-center gap-3 px-3 py-2 transition-colors duration-100 text-left",
-                                    index === selectedIndex 
-                                        ? "bg-accent text-accent-foreground" 
+                                    index === selectedIndex
+                                        ? "bg-accent text-accent-foreground"
                                         : "hover:bg-muted/50"
                                 )}
                             >
                                 {/* Avatar */}
                                 <div className="relative flex-shrink-0">
                                     {user.avatar ? (
-                                        <img 
-                                            src={user.avatar} 
+                                        <img
+                                            src={user.avatar}
                                             alt={user.name}
                                             className="w-7 h-7 rounded-full object-cover"
                                         />
@@ -150,8 +151,8 @@ export function UserMentionMenu({
                         onClick={() => onCreateUser(searchTerm)}
                         className={cn(
                             "w-full flex items-center gap-3 px-3 py-2 transition-colors duration-100 text-left",
-                            filteredUsers.length === selectedIndex 
-                                ? "bg-accent text-accent-foreground" 
+                            filteredUsers.length === selectedIndex
+                                ? "bg-accent text-accent-foreground"
                                 : "hover:bg-muted/50 text-primary"
                         )}
                     >
@@ -219,14 +220,14 @@ export function useUserMentions(
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (!isOpen) return;
 
-        const filteredUsers = searchTerm 
-            ? users.filter(u => 
+        const filteredUsers = searchTerm
+            ? users.filter(u =>
                 u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 u.username.toLowerCase().includes(searchTerm.toLowerCase())
-              )
+            )
             : users.slice(0, 10);
 
-        const createOption = searchTerm && 
+        const createOption = searchTerm &&
             !filteredUsers.some(u => u.username.toLowerCase() === searchTerm.toLowerCase());
         const totalItems = filteredUsers.length + (createOption ? 1 : 0);
 

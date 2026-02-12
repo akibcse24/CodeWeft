@@ -29,6 +29,7 @@ export function EditorWorkspace() {
 
     const [tabs, setTabs] = useState<EditorTab[]>([]);
     const [activeTabId, setActiveTabId] = useState<string | null>(null);
+    const [isOpeningFile, setIsOpeningFile] = useState<string | null>(null);
     const queryClient = useQueryClient();
     const { confirm, Dialogs } = useDialogs();
 
@@ -91,13 +92,25 @@ export function EditorWorkspace() {
         }
 
         try {
+            setIsOpeningFile(file.path);
             // Fetch file content
             const fileContent = await getFileContent(owner, repo, file.path, branch);
 
-            // Decode base64 content
-            const content = fileContent.content
-                ? atob(fileContent.content)
-                : '';
+            // Decode base64 content using Unicode-safe approach
+            let content = '';
+            if (fileContent.content) {
+                try {
+                    const binaryString = atob(fileContent.content.replace(/\s/g, ''));
+                    const bytes = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+                    content = new TextDecoder().decode(bytes);
+                } catch (decodeError) {
+                    console.error("[Editor] Failed to decode file content:", decodeError);
+                    content = "Error: Failed to decode file content. It might be a binary file or have an invalid encoding.";
+                }
+            }
 
             const newTab: EditorTab = {
                 id: file.path,
@@ -114,6 +127,8 @@ export function EditorWorkspace() {
             setActiveTabId(newTab.id);
         } catch (error) {
             toast.error(`Failed to open file: ${(error as Error).message}`);
+        } finally {
+            setIsOpeningFile(null);
         }
     }, [tabs, owner, repo, branch]);
 

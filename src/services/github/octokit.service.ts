@@ -19,99 +19,80 @@ import { logger } from '@/lib/logger';
 let octokitInstance: Octokit | null = null;
 let currentToken: string | null = null;
 
+import { db } from '@/lib/db';
+
+// ... (existing imports)
+
 /**
- * Initialize Octokit with GitHub token from Supabase settings
+ * Initialize Octokit with GitHub token from Supabase settings (via Dexie)
  */
-export async function initializeOctokit(forceRefresh = false): Promise<Octokit> {
-    // Return cached instance if token hasn't changed
-    if (octokitInstance && !forceRefresh && currentToken) {
-        return octokitInstance;
+// Initialize Octokit instance (with persistent token)
+export async function initializeOctokit(forceRefresh = false, providedUserId?: string): Promise<Octokit> {
+    // Fetch user's GitHub token from configured settings
+    // console.log('[Octokit] Getting user/session...', providedUserId ? `(ID Provided: ${providedUserId})` : '(No ID)');
+
+    let userId = providedUserId;
+
+    if (!userId) {
+        // Use getSession with a timeout race to prevent indefinite hanging
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Auth timeout')), 5000)
+        );
+
+        try {
+            const result = await Promise.race([sessionPromise, timeoutPromise]) as { data: { session: { user: any } | null }, error: any };
+            if (result.error) {
+                console.error('[Octokit] Auth error:', result.error);
+            }
+            userId = result.data?.session?.user?.id;
+        } catch (err) {
+            console.error('[Octokit] Auth timeout or error:', err);
+            // Fallback: try getUser if getSession fails/times out, but this might also hang?
+            // Let's assume on timeout we fail fast. 
+            // Can also try checking local storage directly if needed, but supabase client handles that.
+            throw new Error('Authentication timed out. Please refresh.');
+        }
     }
 
-    // Fetch user's GitHub token from Supabase
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
+    if (!userId) {
         throw new Error('User not authenticated');
     }
 
-    const { data: settings, error } = await supabase
-        .from('github_settings')
-        .select('github_token')
-        .eq('user_id', user.id)
-        .maybeSingle();
+    // console.log('[Octokit] User found:', userId);
 
-    if (error) throw error;
+    // LOCAL FIRST: Get token from Dexie
+    // console.log('[Octokit] Fetching settings from Dexie...');
+    const settings = await db.github_settings.where('user_id').equals(userId).first();
+    // console.log('[Octokit] Dexie fetch complete.', settings ? 'Found settings.' : 'No settings found.');
 
-    if (!settings?.github_token) {
+    const newToken = settings?.github_token;
+
+    if (!newToken) {
+        console.error('[Octokit] Token missing in local DB.');
         throw new Error('GitHub token not configured. Please connect GitHub in Settings.');
     }
 
-    currentToken = settings.github_token;
+    // Return cached instance if token hasn't changed
+    if (octokitInstance && !forceRefresh && currentToken === newToken) {
+        console.log('[Octokit] Using cached instance.');
+        return octokitInstance;
+    }
 
-    // Create new Octokit instance with a custom request handler that proxies through Supabase
+    console.log('[Octokit] Creating new instance with token.');
+    currentToken = newToken;
+
+    // Create new Octokit instance for direct client-side usage
     octokitInstance = new Octokit({
         auth: currentToken,
         userAgent: 'CS-Learning-Hub/1.0.0',
-        request: {
-            fetch: async (url: string, options: any) => {
-                // Only proxy GitHub API calls
-                if (url.includes('api.github.com')) {
-                    const urlObj = new URL(url);
-                    const path = urlObj.pathname + urlObj.search;
-
-                    logger.debug(`[Octokit Proxy] ${options.method} ${path}`);
-
-                    try {
-                        const invokeOptions: any = {
-                            method: options.method || 'GET'
-                        };
-
-                        let functionPath = 'github-api?action=proxy';
-
-                        if (invokeOptions.method === 'GET' || invokeOptions.method === 'HEAD') {
-                            // Pass as query param for GET/HEAD
-                            functionPath += `&path=${encodeURIComponent(path)}`;
-                        } else {
-                            // Pass in body for others
-                            invokeOptions.body = {
-                                path,
-                                data: options.body ? JSON.parse(options.body) : undefined
-                            };
-                        }
-
-                        logger.debug(`[Octokit Proxy] Invoking ${functionPath}`);
-
-                        const { data, error } = await supabase.functions.invoke(functionPath, invokeOptions);
-
-                        if (error) {
-                            logger.error(`[Octokit Proxy] Invoke Error (${functionPath}):`, error);
-                            // Log body if it's a FunctionsHttpError
-                            if (error instanceof Error && 'context' in (error as any)) {
-                                try {
-                                    // FunctionsHttpError usually has the message as the response body
-                                    console.log("[Octokit Proxy] Detailed error context:", error);
-                                } catch (e) { /* ignore */ }
-                            }
-                            throw error;
-                        }
-
-                        // Reconstruct a Response-like object for Octokit
-                        return new Response(JSON.stringify(data), {
-                            status: 200, // The Edge Function handles the status internally and returns JSON
-                            headers: new Headers({
-                                'Content-Type': 'application/json'
-                            })
-                        });
-                    } catch (err) {
-                        logger.error(`[Octokit Proxy] Network error:`, err);
-                        throw err;
-                    }
-                }
-
-                // Fallback to standard fetch for non-GitHub URLs
-                return fetch(url, options);
-            }
+        // No custom request handler needed for direct access
+        // Octokit uses global fetch by default in modern environments
+        log: {
+            debug: (msg) => console.debug(`[Octokit Internal] ${msg}`),
+            info: (msg) => console.info(`[Octokit Internal] ${msg}`),
+            warn: (msg) => console.warn(`[Octokit Internal] ${msg}`),
+            error: (msg) => console.error(`[Octokit Internal] ${msg}`),
         }
     });
 

@@ -75,14 +75,14 @@ export class QuickFindService {
     const pages = await db.pages
       .where("user_id")
       .equals(userId)
-      .and((p) => !p.is_archived)
+      .and((p) => !p.is_archived && !p.deleted_at)
       .toArray();
 
     for (const page of pages) {
       const content = page.content as unknown as Block[];
       if (!content || !Array.isArray(content)) continue;
 
-      const pageMatches = this.searchBlocks(content, page, [], cleanQuery);
+      const pageMatches = this.searchBlocks(content, page, [], cleanQuery, new Set());
       matches.push(...pageMatches);
     }
 
@@ -94,11 +94,18 @@ export class QuickFindService {
     blocks: Block[],
     page: Page,
     path: string[],
-    query: string
+    query: string,
+    visited: Set<string>
   ): SearchMatch[] {
     const matches: SearchMatch[] = [];
 
     for (const block of blocks) {
+      if (visited.has(block.id)) {
+        console.warn(`[QuickFind] Circular reference detected for block ${block.id}`);
+        continue;
+      }
+      visited.add(block.id);
+
       const currentPath = [...path, block.type];
       let relevance = 0;
 
@@ -120,7 +127,8 @@ export class QuickFindService {
           block.children,
           page,
           currentPath,
-          query
+          query,
+          new Set(visited)
         );
         matches.push(...childMatches);
       }
@@ -132,7 +140,8 @@ export class QuickFindService {
               column,
               page,
               [...currentPath, "column"],
-              query
+              query,
+              new Set(visited)
             );
             matches.push(...columnMatches);
           }
@@ -260,7 +269,7 @@ export class QuickFindService {
     const localResults = await db.pages
       .where("user_id")
       .equals(userId)
-      .and((p) => !p.is_archived)
+      .and((p) => !p.is_archived && !p.deleted_at)
       .filter((p) => p.title.toLowerCase().includes(cleanQuery))
       .limit(10)
       .toArray();
@@ -275,6 +284,7 @@ export class QuickFindService {
         .select("*")
         .eq("user_id", userId)
         .eq("is_archived", false)
+        .is("deleted_at", null)
         .ilike("title", `%${cleanQuery}%`)
         .order("updated_at", { ascending: false })
         .limit(10);

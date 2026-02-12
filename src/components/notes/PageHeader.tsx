@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Smile, Image as ImageIcon, MessageSquare, Maximize2, Minimize2 } from 'lucide-react';
+import { Smile, Image as ImageIcon, MessageSquare, Maximize2, Minimize2, Cloud, CloudOff, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { EmojiPicker } from '@/components/editor/EmojiPicker';
 import { useFocusMode } from '@/contexts/FocusContext';
 import { SharePopover } from './SharePopover';
+import { useSync } from '@/hooks/useSync';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface PageHeaderProps {
     title: string;
@@ -37,6 +39,7 @@ export function PageHeader({
     const [isHovering, setIsHovering] = useState(false);
     const titleRef = useRef<HTMLHeadingElement>(null);
     const { isFocusMode, toggleFocusMode } = useFocusMode();
+    const { syncAll, syncStatus, pendingCount, isSyncing } = useSync();
 
     // Sync contentEditable title
     useEffect(() => {
@@ -64,14 +67,68 @@ export function PageHeader({
             onMouseEnter={() => setIsHovering(true)}
             onMouseLeave={() => setIsHovering(false)}
         >
-            {/* Focus Toggle & Share - Fixed Top Right */}
-            <div className="absolute top-0 right-0 z-10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
-                {pageId && onPublicChange && (
-                    <SharePopover pageId={pageId} isPublic={isPublic} onPublicChange={onPublicChange} />
-                )}
-                <Button variant="ghost" size="icon" onClick={toggleFocusMode} className="text-muted-foreground hover:text-primary h-8 w-8">
-                    {isFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                </Button>
+            {/* Top Right Actions */}
+            <div className="absolute top-0 right-0 z-20 flex items-center gap-2">
+                <TooltipProvider>
+                    <Tooltip delayDuration={300}>
+                        <TooltipTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={syncAll}
+                                disabled={isSyncing}
+                                className={cn(
+                                    "h-8 px-2 text-xs font-medium transition-all group/sync",
+                                    syncStatus === 'error' ? "text-destructive hover:bg-destructive/10" : "text-muted-foreground hover:bg-accent"
+                                )}
+                            >
+                                <AnimatePresence mode="wait">
+                                    <motion.div
+                                        key={syncStatus}
+                                        initial={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.8 }}
+                                        className="flex items-center gap-1.5"
+                                    >
+                                        {syncStatus === 'syncing' ? (
+                                            <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+                                        ) : syncStatus === 'error' ? (
+                                            <AlertCircle className="h-3.5 w-3.5" />
+                                        ) : syncStatus === 'success' ? (
+                                            <CheckCircle2 className="h-3.5 w-3.5 text-success" />
+                                        ) : pendingCount > 0 ? (
+                                            <CloudOff className="h-3.5 w-3.5" />
+                                        ) : (
+                                            <Cloud className="h-3.5 w-3.5" />
+                                        )}
+
+                                        {!isFocusMode && (isHovering || pendingCount > 0) && (
+                                            <span>
+                                                {syncStatus === 'syncing' ? 'Syncing...' :
+                                                    syncStatus === 'error' ? 'Sync Error' :
+                                                        pendingCount > 0 ? `${pendingCount} unsaved` : 'Saved'}
+                                            </span>
+                                        )}
+                                    </motion.div>
+                                </AnimatePresence>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" align="end" className="text-xs">
+                            {syncStatus === 'error' ? 'Click to retry sync' :
+                                pendingCount > 0 ? `Pushing ${pendingCount} local changes to cloud` :
+                                    'Your work is synced with the cloud'}
+                        </TooltipContent>
+                    </Tooltip>
+                </TooltipProvider>
+
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+                    {pageId && onPublicChange && (
+                        <SharePopover pageId={pageId} isPublic={isPublic} onPublicChange={onPublicChange} />
+                    )}
+                    <Button variant="ghost" size="icon" onClick={toggleFocusMode} className="text-muted-foreground hover:text-primary h-8 w-8">
+                        {isFocusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                    </Button>
+                </div>
             </div>
 
             {/* Page Icon - Overlapping if cover exists */}

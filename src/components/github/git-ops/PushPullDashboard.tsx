@@ -89,7 +89,18 @@ export function PushPullDashboard({ onRepoSelect, onBranchSelect }: PushPullDash
                 {/* Repository Selection */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Repository</label>
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium">Repository</label>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => window.location.reload()} // Simple reload for now, or could iterate refetch
+                                title="Refresh Repositories"
+                            >
+                                <RefreshCw className="h-3 w-3" />
+                            </Button>
+                        </div>
                         {isLoadingRepos ? (
                             <Skeleton className="h-10 w-full" />
                         ) : repoError ? (
@@ -97,23 +108,30 @@ export function PushPullDashboard({ onRepoSelect, onBranchSelect }: PushPullDash
                                 Failed to load repositories. Please check your GitHub connection in Settings.
                             </div>
                         ) : (
-                            <Select onValueChange={handleRepoChange}>
+                            <Select value={selectedRepo ? `${selectedRepo.owner}/${selectedRepo.repo}` : ''} onValueChange={handleRepoChange}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select a repository..." />
+                                    <SelectValue placeholder="Select a repository" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {repositories?.map((repo) => (
-                                        <SelectItem key={repo.id} value={`${repo.owner.login}/${repo.name}`}>
-                                            <div className="flex items-center gap-2">
-                                                <span>{repo.name}</span>
-                                                {repo.private && (
-                                                    <Badge variant="outline" className="text-xs">
-                                                        Private
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                        </SelectItem>
-                                    ))}
+                                    {repositories && repositories.length > 0 ? (
+                                        repositories.map((repo) => (
+                                            <SelectItem key={repo.id} value={`${repo.owner.login}/${repo.name}`}>
+                                                <div className="flex items-center gap-2">
+                                                    <span>{repo.name}</span>
+                                                    {repo.private && (
+                                                        <Badge variant="outline" className="text-xs">
+                                                            Private
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </SelectItem>
+                                        ))) : (
+                                        <div className="p-2 text-sm text-muted-foreground text-center">
+                                            No repositories found.
+                                            <br />
+                                            <span className="text-xs">(Check browser console for details)</span>
+                                        </div>
+                                    )}
                                 </SelectContent>
                             </Select>
                         )}
@@ -255,6 +273,6 @@ export function PushPullDashboard({ onRepoSelect, onBranchSelect }: PushPullDash
                     </motion.div>
                 )}
             </CardContent>
-        </Card>
+        </Card >
     );
 }

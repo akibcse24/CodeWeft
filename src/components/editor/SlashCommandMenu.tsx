@@ -44,6 +44,9 @@ const categoryLabels: Record<string, string> = {
 
 const categoryOrder = ['basic', 'text', 'list', 'media', 'database', 'advanced', 'layout', 'embed'];
 
+const MENU_WIDTH = 288; // w-72 = 18rem = 288px
+const MENU_MAX_HEIGHT = 320; // max-h-[320px]
+
 export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
     isOpen,
     commands,
@@ -56,6 +59,13 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
 }) => {
     const menuRef = useRef<HTMLDivElement>(null);
     const selectedRef = useRef<HTMLButtonElement>(null);
+
+    const menuPosition = useMemo(() => {
+        if (!position) return { x: 0, y: 0 };
+        const adjustedX = Math.max(10, Math.min(position.x, window.innerWidth - MENU_WIDTH - 10));
+        const adjustedY = Math.max(10, Math.min(position.y, window.innerHeight - MENU_MAX_HEIGHT - 100));
+        return { x: adjustedX, y: adjustedY };
+    }, [position]);
 
     const groupedCommands = useMemo(() => {
         const groups: Record<string, SlashCommand[]> = {};
@@ -118,8 +128,8 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 className="fixed z-[100] w-72 bg-popover border border-border shadow-xl rounded-lg overflow-hidden"
                 style={{
-                    left: Math.min(position?.x || 0, window.innerWidth - 300),
-                    top: Math.min(position?.y || 0, window.innerHeight - 400),
+                    left: menuPosition.x,
+                    top: menuPosition.y,
                 }}
                 data-slash-menu
             >

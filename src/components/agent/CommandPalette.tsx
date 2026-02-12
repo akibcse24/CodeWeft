@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Command as CommandIcon, Search, FileText, CheckSquare, 
+import {
+  Command as CommandIcon, Search, FileText, CheckSquare,
   BookOpen, Calendar, Settings, Home, Sparkles, X,
   Clock, Star, TrendingUp, Zap, Brain, ChevronRight
 } from "lucide-react";
@@ -31,12 +31,12 @@ interface CommandItem {
   shortcut?: string;
 }
 
-export function CommandPalette({ 
-  isOpen, 
-  onClose, 
-  onSelect, 
+export function CommandPalette({
+  isOpen,
+  onClose,
+  onSelect,
   recentCommands = [],
-  userId 
+  userId
 }: CommandPaletteProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -106,13 +106,13 @@ export function CommandPalette({
       const recent = recentCommands
         .map(cmd => commands.find(c => c.action === cmd))
         .filter(Boolean) as CommandItem[];
-      
+
       setFilteredCommands(recent.length > 0 ? recent : commands.slice(0, 10));
       return;
     }
 
     const query = searchQuery.toLowerCase();
-    const filtered = commands.filter(cmd => 
+    const filtered = commands.filter(cmd =>
       cmd.name.toLowerCase().includes(query) ||
       cmd.description.toLowerCase().includes(query) ||
       cmd.category.toLowerCase().includes(query)
@@ -120,10 +120,10 @@ export function CommandPalette({
 
     // Also try to parse natural language
     if (filtered.length === 0 && searchQuery.length > 3) {
-      nluService.parseCommand(searchQuery, { 
-        userId, 
-        recentCommands: [], 
-        conversationHistory: [] 
+      nluService.parseCommand(searchQuery, {
+        userId,
+        recentCommands: [],
+        conversationHistory: []
       }).then(parsed => {
         if (parsed.confidence > 0.6) {
           const nlCommand: CommandItem = {
@@ -146,6 +146,12 @@ export function CommandPalette({
 
     setSelectedIndex(0);
   }, [searchQuery, commands, recentCommands, userId]);
+
+  const executeCommand = useCallback((command: CommandItem) => {
+    onSelect(command.action, command.params);
+    onClose();
+    setSearchQuery("");
+  }, [onSelect, onClose]);
 
   // Keyboard navigation
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -171,7 +177,7 @@ export function CommandPalette({
         onClose();
         break;
     }
-  }, [isOpen, filteredCommands, selectedIndex, onClose]);
+  }, [isOpen, filteredCommands, selectedIndex, onClose, executeCommand]);
 
   useEffect(() => {
     document.addEventListener("keydown", handleKeyDown);
@@ -185,11 +191,6 @@ export function CommandPalette({
     }
   }, [isOpen]);
 
-  const executeCommand = (command: CommandItem) => {
-    onSelect(command.action, command.params);
-    onClose();
-    setSearchQuery("");
-  };
 
   const categories = [...new Set(commands.map(c => c.category))];
 
@@ -263,7 +264,7 @@ export function CommandPalette({
             ) : (
               filteredCommands.map((command, index) => {
                 if (activeCategory && command.category !== activeCategory) return null;
-                
+
                 const Icon = command.icon;
                 const isSelected = index === selectedIndex;
 
@@ -284,7 +285,7 @@ export function CommandPalette({
                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                       <Icon className="h-5 w-5 text-primary" />
                     </div>
-                    
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium truncate">{command.name}</span>
@@ -302,7 +303,7 @@ export function CommandPalette({
                         {command.shortcut}
                       </kbd>
                     )}
-                    
+
                     <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100" />
                   </motion.button>
                 );

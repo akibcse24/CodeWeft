@@ -23,6 +23,7 @@ export async function listUserRepositories(
     } = {}
 ): Promise<GitHubRepository[]> {
     return withRetry(async () => {
+        console.log('[RepoService] Listing user repositories...');
         const octokit = await getOctokit();
         const { data } = await octokit.repos.listForAuthenticatedUser({
             type: options.type || 'all',
@@ -30,6 +31,7 @@ export async function listUserRepositories(
             direction: options.direction || 'desc',
             per_page: options.per_page || 50,
         });
+        console.log(`[RepoService] Found ${data.length} repositories.`);
         return data;
     });
 }

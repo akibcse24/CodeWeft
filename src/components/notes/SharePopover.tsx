@@ -53,13 +53,44 @@ export function SharePopover({ pageId, isPublic, onPublicChange }: SharePopoverP
         }
     };
 
-    const copyToClipboard = () => {
-        navigator.clipboard.writeText(shareUrl);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-        toast({
-            description: "Link copied to clipboard",
-        });
+    const copyToClipboard = async () => {
+        try {
+            await navigator.clipboard.writeText(shareUrl);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+            toast({
+                description: "Link copied to clipboard",
+            });
+        } catch (error) {
+            console.error("Failed to copy to clipboard:", error);
+            // Fallback for older browsers or non-secure contexts
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = shareUrl;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '0';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                if (successful) {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                    toast({
+                        description: "Link copied to clipboard",
+                    });
+                } else {
+                    throw new Error("execCommand was unsuccessful");
+                }
+            } catch (fallbackError) {
+                toast({
+                    variant: "destructive",
+                    description: "Failed to copy link to clipboard",
+                });
+            }
+        }
     };
 
     return (

@@ -20,6 +20,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useFocusMode() {
     const context = useContext(FocusContext);
     if (context === undefined) {

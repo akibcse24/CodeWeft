@@ -34,8 +34,9 @@ export function NetworkTest() {
             const time = Date.now() - start;
             setStatus(`Proxy Success (${time}ms): ${data}`);
             toast.success('Proxied fetch worked!');
-        } catch (e: any) {
-            setStatus(`Proxy Failed: ${e.message || e}`);
+        } catch (e) {
+            const error = e as Error;
+            setStatus(`Proxy Failed: ${error.message || String(e)}`);
             toast.error('Proxied fetch failed');
         }
     };

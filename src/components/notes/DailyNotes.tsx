@@ -93,6 +93,7 @@ export function DailyNotes({ onSelectDate, currentDate = new Date() }: DailyNote
 /**
  * Generate daily note title from date
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function getDailyNoteTitle(date: Date): string {
     return format(date, 'yyyy-MM-dd');
 }
@@ -100,6 +101,7 @@ export function getDailyNoteTitle(date: Date): string {
 /**
  * Get daily note template blocks
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function getDailyNoteTemplate(date: Date) {
     return [
         {

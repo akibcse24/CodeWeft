@@ -219,8 +219,8 @@ export async function updateFile(
     return withRetry(async () => {
         const octokit = await getOctokit();
 
-        // Convert content to base64
-        const contentBase64 = btoa(unescape(encodeURIComponent(content)));
+        // Convert content to base64 using modern approach (Unicode safe)
+        const contentBase64 = btoa(String.fromCharCode(...new TextEncoder().encode(content)));
 
         const { data } = await octokit.repos.createOrUpdateFileContents({
             owner,
@@ -320,7 +320,7 @@ export async function createCommit(
         // Create blobs for each file
         const blobs = await Promise.all(
             files.map(async (file) => {
-                const contentBase64 = btoa(unescape(encodeURIComponent(file.content)));
+                const contentBase64 = btoa(String.fromCharCode(...new TextEncoder().encode(file.content)));
                 const { data: blob } = await octokit.git.createBlob({
                     owner,
                     repo,

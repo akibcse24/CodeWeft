@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
@@ -13,53 +13,51 @@ export function useTasks() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [localTasks, setLocalTasks] = useState<Task[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   // 1. Manual Observer for Dexie
-  useEffect(() => {
-    if (!user) return;
-
-    const fetchLocal = async () => {
-      const data = await db.tasks
-        .where("user_id")
-        .equals(user.id)
-        .reverse()
-        .sortBy("created_at");
-      setLocalTasks(data);
-    };
-
-    fetchLocal();
-
-    // Simple poll or custom event could work, but for now we'll update on mutations
-    // Dexie also has a middleware system or hooks but this is the simplest without dependencies
-  }, [user?.id]);
-
-  // Hook into Dexie changes (Crudely for now, better to use a real observer if possible)
-  const refreshLocal = async () => {
+  const fetchLocal = useCallback(async () => {
     if (!user) return;
     const data = await db.tasks
       .where("user_id")
       .equals(user.id)
+      .filter(t => !t.deleted_at)
       .reverse()
       .sortBy("created_at");
     setLocalTasks(data);
-  };
+    setIsLoading(false);
+  }, [user]);
 
-  // 2. Fetch from Cloud and populate local (Handled by useSync, but kept here for manual refresh if needed)
-  const tasksQuery = useQuery({
-    queryKey: ["tasks-cloud", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("tasks")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+  useEffect(() => {
+    fetchLocal();
+  }, [fetchLocal]);
 
-      if (error) throw error;
-      return data as Task[];
-    },
-    enabled: !!user,
-  });
+  // 2. One-time Hydration
+  useEffect(() => {
+    if (!user) return;
+    const hydrate = async () => {
+      const count = await db.tasks.where("user_id").equals(user.id).count();
+      if (count > 0) return; // Already have data
+
+      try {
+        const { data } = await supabase
+          .from("tasks")
+          .select("*")
+          .eq("user_id", user.id)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false });
+
+        if (data && data.length > 0) {
+          await db.tasks.bulkPut(data as Task[]);
+          await fetchLocal();
+        }
+      } catch (e) {
+        // Offline or error, just use local
+        console.warn("[useTasks] Hydration failed", e);
+      }
+    };
+    hydrate();
+  }, [user, fetchLocal]);
 
   const createTask = useMutation({
     mutationFn: async (task: Omit<TaskInsert, "user_id">) => {
@@ -70,12 +68,15 @@ export function useTasks() {
         id,
         user_id: user.id,
         created_at: new Date().toISOString(),
-        status: task.status || 'todo'
+        updated_at: new Date().toISOString(),
+        deleted_at: null,
+        status: task.status || 'todo',
+        priority: task.priority || 'medium' // Ensure priority is set
       } as Task;
 
       // 1. Update Local Immediately
       await db.tasks.add(newTask);
-      await refreshLocal();
+      await fetchLocal();
 
       // 2. Queue for Sync
       await db.sync_queue.add({
@@ -85,95 +86,77 @@ export function useTasks() {
         timestamp: Date.now()
       });
 
-      // 3. Attempt Background Cloud Sync
-      try {
-        const { error } = await supabase
-          .from("tasks")
-          .insert(newTask);
-
-        if (!error) {
-          // Success, cleanup queue entry
-          // Use a find and delete approach since we don't have the sync_queue ID directly here
-          const items = await db.sync_queue.where({ table: 'tasks' }).toArray();
-          const target = items.find(i => i.data.id === newTask.id);
-          if (target) await db.sync_queue.delete(target.id!);
-        }
-      } catch (e) {
-        console.warn("Background sync failed, will retry later.");
-      }
+      // 3. Fire-and-Forget Cloud Sync
+      supabase.from("tasks").insert(newTask).then(({ error }) => {
+        if (error) console.warn("[useTasks] Background insert failed:", error);
+      });
 
       return newTask;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks-cloud"] });
+      // No need to invalidate queries as we drive from local state
     },
   });
 
   const updateTask = useMutation({
     mutationFn: async ({ id, ...updates }: TaskUpdate & { id: string }) => {
+      const updated_at = new Date().toISOString();
+      const finalUpdates = { ...updates, updated_at };
+
       // 1. Update Local
-      await db.tasks.update(id, updates);
-      await refreshLocal();
+      await db.tasks.update(id, finalUpdates);
+      await fetchLocal();
 
       const currentTask = await db.tasks.get(id);
 
       // 2. Queue for Sync
-      await db.sync_queue.add({
-        table: 'tasks',
-        action: 'update',
-        data: currentTask,
-        timestamp: Date.now()
-      });
-
-      // 3. Background Cloud Sync
-      try {
-        await supabase
-          .from("tasks")
-          .update(updates)
-          .eq("id", id);
-      } catch (e) {
-        console.warn("Background update sync failed.");
+      if (currentTask) {
+        await db.sync_queue.add({
+          table: 'tasks',
+          action: 'update',
+          data: currentTask,
+          timestamp: Date.now()
+        });
       }
 
+      // 3. Fire-and-Forget Cloud Sync
+      supabase.from("tasks").update(finalUpdates).eq("id", id).then(({ error }) => {
+        if (error) console.warn("[useTasks] Background update failed:", error);
+      });
+
       return currentTask;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks-cloud"] });
     },
   });
 
   const deleteTask = useMutation({
     mutationFn: async (id: string) => {
-      // 1. Local Delete
-      await db.tasks.delete(id);
-      await refreshLocal();
+      const now = new Date().toISOString();
+
+      // 1. Local Soft Delete
+      await db.tasks.update(id, { deleted_at: now, updated_at: now });
+      await fetchLocal();
 
       // 2. Queue for Sync
       await db.sync_queue.add({
         table: 'tasks',
         action: 'delete',
-        data: { id },
+        data: { id, deleted_at: now },
         timestamp: Date.now()
       });
 
-      // 3. Background Sync
-      try {
-        await supabase.from("tasks").delete().eq("id", id);
-      } catch (e) {
-        console.warn("Background delete sync failed.");
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks-cloud"] });
+      // 3. Fire-and-Forget Cloud Sync
+      supabase.from("tasks").update({ deleted_at: now }).eq("id", id).then(({ error }) => {
+        if (error) console.warn("[useTasks] Background delete failed:", error);
+      });
     },
   });
 
   return useMemo(() => ({
     tasks: localTasks,
-    isLoading: tasksQuery.isLoading && localTasks.length === 0,
-    error: tasksQuery.error,
+    isLoading: isLoading && localTasks.length === 0,
+    error: null,
     createTask,
     updateTask,
     deleteTask,
-  }), [localTasks, tasksQuery.isLoading, tasksQuery.error, createTask, updateTask, deleteTask]);
+  }), [localTasks, isLoading, createTask, updateTask, deleteTask]);
 }

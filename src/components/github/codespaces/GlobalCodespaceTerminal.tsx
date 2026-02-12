@@ -15,16 +15,24 @@ export function GlobalCodespaceTerminal() {
 
     useEffect(() => {
         async function fetchToken() {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const { data } = await supabase
-                    .from('github_settings')
-                    .select('github_token')
-                    .eq('user_id', user.id)
-                    .maybeSingle();
-                if (data?.github_token) {
-                    setGithubToken(data.github_token);
+            try {
+                const { data: { user }, error: authError } = await supabase.auth.getUser();
+                if (authError) throw authError;
+
+                if (user) {
+                    const { data, error } = await supabase
+                        .from('github_settings')
+                        .select('github_token')
+                        .eq('user_id', user.id)
+                        .maybeSingle();
+
+                    if (error) throw error;
+                    if (data?.github_token) {
+                        setGithubToken(data.github_token);
+                    }
                 }
+            } catch (error) {
+                console.error("[GlobalTerminal] Error fetching token:", error);
             }
         }
         fetchToken();
